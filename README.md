@@ -1,4 +1,4 @@
-# MIPDecoder
+# ILPDecoder
 
 An ILP-based Quantum Error Correction (QEC) decoder built on **Pyomo** for solver-agnostic optimization modeling.
 
