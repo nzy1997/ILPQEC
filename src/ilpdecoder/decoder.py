@@ -47,7 +47,7 @@ from pyomo.environ import (
     TerminationCondition,
 )
 
-from mipdecoder.solver import (
+from ilpdecoder.solver import (
     SolverConfig,
     get_default_solver,
     get_pyomo_solver_name,
@@ -277,7 +277,7 @@ class Decoder:
                 - "cbc": COIN-OR CBC
                 - "glpk": GNU Linear Programming Kit
             time_limit: Maximum solving time in seconds
-            gap: Relative MIP gap tolerance
+            gap: Relative ILP gap tolerance
             threads: Number of threads (solver-dependent)
             verbose: Print solver output
             **options: Additional solver-specific options

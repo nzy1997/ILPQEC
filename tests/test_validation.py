@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from mipdecoder import Decoder
+from ilpdecoder import Decoder
 
 
 def test_weights_length_mismatch():

@@ -1,10 +1,10 @@
 """
-MIPDecoder: ILP-based Quantum Error Correction Decoder
+ILPDecoder: ILP-based Quantum Error Correction Decoder
 
 A PyMatching-like decoder using Pyomo for solver-agnostic ILP modeling.
 
 Example:
-    >>> from mipdecoder import Decoder
+    >>> from ilpdecoder import Decoder
     >>> 
     >>> # Create decoder from parity-check matrix
     >>> decoder = Decoder.from_parity_check_matrix(H)
@@ -26,8 +26,8 @@ Supported Solvers:
     - glpk: GNU Linear Programming Kit
 """
 
-from mipdecoder.decoder import Decoder
-from mipdecoder.solver import get_available_solvers, get_default_solver, SolverConfig
+from ilpdecoder.decoder import Decoder
+from ilpdecoder.solver import get_available_solvers, get_default_solver, SolverConfig
 
 __version__ = "0.1.0"
 __all__ = ["Decoder", "get_available_solvers", "get_default_solver", "SolverConfig"]

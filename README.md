@@ -4,7 +4,7 @@ An ILP-based Quantum Error Correction (QEC) decoder built on **Pyomo** for solve
 
 ## Overview
 
-MIPDecoder provides:
+ILPDecoder provides:
 
 - **Solver-agnostic ILP modeling** via Pyomo — write once, use any supported solver
 - **PyMatching-like API** for quantum error correction decoding
@@ -15,15 +15,15 @@ MIPDecoder provides:
 
 ```bash
 # Basic installation (requires a solver to be installed separately)
-pip install mipdecoder
+pip install ilpdecoder
 
 # With Stim support
-pip install mipdecoder[stim]
+pip install ilpdecoder[stim]
 ```
 
 ### Installing Solvers
 
-MIPDecoder uses Pyomo, which requires an external solver. Install at least one:
+ILPDecoder uses Pyomo, which requires an external solver. Install at least one:
 
 ```bash
 # HiGHS (default, open-source, easy to install)
@@ -52,8 +52,8 @@ pip install highspy
 
 ```bash
 # Clone the repository
-git clone https://github.com/mipdecoder/mipdecoder
-cd mipdecoder
+git clone https://github.com/ilpdecoder/ilpdecoder
+cd ilpdecoder
 
 # Create virtual environment (using uv)
 uv venv
@@ -96,7 +96,7 @@ python examples/surface_code_example.py
 
 ```python
 import numpy as np
-from mipdecoder import Decoder
+from ilpdecoder import Decoder
 
 # Define a simple repetition code parity-check matrix
 H = np.array([
@@ -130,7 +130,7 @@ decoder.set_solver("cplex", gap=0.01)
 
 ```python
 import stim
-from mipdecoder import Decoder
+from ilpdecoder import Decoder
 
 # Generate a surface code circuit
 circuit = stim.Circuit.generated(
@@ -168,7 +168,7 @@ for i in range(10):
 
 ```python
 import numpy as np
-from mipdecoder import Decoder
+from ilpdecoder import Decoder
 
 H = np.array([[1, 1, 0], [0, 1, 1]])
 error_probs = [0.1, 0.01, 0.1]
@@ -212,7 +212,7 @@ minimize Σ_j w_j · e_j
 decoder.set_solver(
     "scip",           # Solver name
     time_limit=30,    # Max solving time (seconds)
-    gap=0.01,         # Relative MIP gap tolerance
+    gap=0.01,         # Relative ILP gap tolerance
     threads=4,        # Number of threads (solver-dependent)
     verbose=True,     # Print solver output
 )
@@ -221,7 +221,7 @@ decoder.set_solver(
 | Option | Description | Supported Solvers |
 |--------|-------------|-------------------|
 | `time_limit` | Max solving time (seconds) | All |
-| `gap` | Relative MIP gap tolerance | All |
+| `gap` | Relative ILP gap tolerance | All |
 | `threads` | Number of threads | HiGHS, Gurobi, CPLEX |
 | `verbose` | Print solver output | All |
 
@@ -251,7 +251,7 @@ Main decoder class.
 Returns a list of available solver names.
 
 ```python
-from mipdecoder import get_available_solvers
+from ilpdecoder import get_available_solvers
 print(get_available_solvers())  # e.g., ['scip', 'highs', 'cbc']
 ```
 

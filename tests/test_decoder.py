@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 
-from mipdecoder import Decoder, get_available_solvers
+from ilpdecoder import Decoder, get_available_solvers
 
 
 # Skip tests if no solver is available

@@ -2,7 +2,7 @@
 
 import pytest
 
-from mipdecoder.solver import (
+from ilpdecoder.solver import (
     SolverConfig,
     get_available_solvers,
     get_default_solver,

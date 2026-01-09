@@ -1,16 +1,16 @@
 """
-MIPDecoder - ILP-based Quantum Error Correction Decoder
+ILPDecoder - ILP-based Quantum Error Correction Decoder
 
 Run basic functionality test.
 """
 
 import numpy as np
-from mipdecoder import Decoder, get_available_solvers
+from ilpdecoder import Decoder, get_available_solvers
 
 
 def main():
     """Run basic functionality test."""
-    print("MIPDecoder - ILP-based QEC Decoder (using Pyomo)")
+    print("ILPDecoder - ILP-based QEC Decoder (using Pyomo)")
     print("=" * 50)
     
     available = get_available_solvers()

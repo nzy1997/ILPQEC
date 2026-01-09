@@ -1,5 +1,5 @@
 """
-Basic usage examples for MIPDecoder.
+Basic usage examples for ILPDecoder.
 
 This script demonstrates the core functionality:
 1. Decoding with parity-check matrices
@@ -10,7 +10,7 @@ This script demonstrates the core functionality:
 
 import numpy as np
 
-from mipdecoder import Decoder, get_available_solvers
+from ilpdecoder import Decoder, get_available_solvers
 
 
 def example_repetition_code():
@@ -158,7 +158,7 @@ def example_batch_decoding():
 
 def main():
     """Run all examples."""
-    print("MIPDecoder Examples")
+    print("ILPDecoder Examples")
     print("=" * 60)
     print(f"Available solvers: {get_available_solvers()}")
     

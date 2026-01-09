@@ -1,5 +1,5 @@
 """
-Solver configuration for MIPDecoder.
+Solver configuration for ILPDecoder.
 
 This module provides solver configuration for selecting and configuring backends.
 Pyomo handles the actual solver abstraction - we just configure which solver to use.
@@ -36,7 +36,7 @@ class SolverConfig:
     Attributes:
         name: Solver name (highs, scip, gurobi, cplex, cbc, glpk)
         time_limit: Maximum solving time in seconds
-        gap: Relative MIP gap tolerance
+        gap: Relative ILP gap tolerance
         threads: Number of threads (solver-dependent)
         verbose: Print solver output
         options: Additional solver-specific options
