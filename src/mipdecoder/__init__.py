@@ -1,8 +1,7 @@
 """
 MIPDecoder: ILP-based Quantum Error Correction Decoder
 
-A PyMatching-like decoder using Pyomo for solver-agnostic ILP modeling,
-similar to JuMP in Julia.
+A PyMatching-like decoder using Pyomo for solver-agnostic ILP modeling.
 
 Example:
     >>> from mipdecoder import Decoder
@@ -11,7 +10,7 @@ Example:
     >>> decoder = Decoder.from_parity_check_matrix(H)
     >>> correction = decoder.decode(syndrome)
     >>> 
-    >>> # Use different solver (like JuMP's set_optimizer)
+    >>> # Use different solver
     >>> decoder.set_solver("highs", time_limit=30)
     >>> 
     >>> # Create from Stim DEM
@@ -19,8 +18,8 @@ Example:
     >>> correction, observables = decoder.decode(detector_outcomes)
 
 Supported Solvers:
-    - scip: SCIP solver (default)
-    - highs: HiGHS solver
+    - highs: HiGHS solver (default)
+    - scip: SCIP solver
     - gurobi: Gurobi (requires license)
     - cplex: IBM CPLEX (requires license)
     - cbc: COIN-OR CBC

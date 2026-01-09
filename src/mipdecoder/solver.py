@@ -1,19 +1,19 @@
 """
 Solver configuration for MIPDecoder.
 
-This module provides solver configuration similar to JuMP's approach.
+This module provides solver configuration for selecting and configuring backends.
 Pyomo handles the actual solver abstraction - we just configure which solver to use.
 
 Supported Solvers:
-    - scip: SCIP solver (default, via scip or scipampl)
-    - highs: HiGHS solver
+    - highs: HiGHS solver (default)
+    - scip: SCIP solver (via scip or scipampl)
     - gurobi: Gurobi solver (requires license)
     - cplex: IBM CPLEX (requires license)
     - cbc: COIN-OR CBC
     - glpk: GNU Linear Programming Kit
 
 Example:
-    # Use default solver (SCIP)
+    # Use default solver (HiGHS)
     decoder = Decoder.from_parity_check_matrix(H)
     
     # Use specific solver
@@ -151,7 +151,7 @@ def get_default_solver() -> str:
     """
     Get the default solver.
     
-    Returns SCIP if available, otherwise the first available solver.
+    Returns HiGHS if available, otherwise the first available solver.
     
     Returns:
         Name of the default solver.
@@ -170,8 +170,8 @@ def get_default_solver() -> str:
     
     raise RuntimeError(
         "No ILP solver available. Please install one of:\n"
-        "  - SCIP: https://www.scipopt.org/ (recommended)\n"
         "  - HiGHS: pip install highspy\n"
+        "  - SCIP: https://www.scipopt.org/\n"
         "  - CBC: apt install coinor-cbc\n"
         "  - GLPK: apt install glpk-utils"
     )

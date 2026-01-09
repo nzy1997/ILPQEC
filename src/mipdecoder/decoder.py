@@ -3,16 +3,16 @@ Main Decoder class using Pyomo for ILP modeling.
 
 This module provides the primary user-facing interface for ILP-based
 quantum error correction decoding. Uses Pyomo for solver-agnostic
-modeling, similar to JuMP in Julia.
+modeling.
 
 Key Features:
-- JuMP-like solver abstraction via Pyomo
+- Solver-agnostic modeling via Pyomo
 - Multiple construction methods (from_parity_check_matrix, from_stim_dem)
 - Easy solver switching (scip, highs, gurobi, cplex, cbc, glpk)
 - Maximum-likelihood and minimum-weight decoding
 
 Example Usage:
-    # From parity-check matrix (uses SCIP by default)
+    # From parity-check matrix (uses HiGHS by default)
     decoder = Decoder.from_parity_check_matrix(H)
     correction = decoder.decode(syndrome)
     
@@ -61,14 +61,14 @@ class Decoder:
     
     This class provides a PyMatching-like API for decoding using
     Integer Linear Programming. It uses Pyomo for solver-agnostic
-    modeling, similar to JuMP in Julia.
+    modeling.
     
     Solver switching is trivial - just call set_solver() with a different
     solver name. No need to rebuild the model.
     
     Supported Solvers:
-        - scip: SCIP solver (default)
-        - highs: HiGHS solver  
+        - highs: HiGHS solver (default)
+        - scip: SCIP solver
         - gurobi: Gurobi (requires license)
         - cplex: IBM CPLEX (requires license)
         - cbc: COIN-OR CBC
@@ -122,8 +122,9 @@ class Decoder:
                 If None, computed from error_probabilities or set to 1.0.
             error_probabilities: Error probability for each mechanism.
                 Used to compute log-likelihood weights if weights not given.
+                Probabilities must be in (0, 0.5].
             solver: Solver name ("scip", "highs", "gurobi", etc.)
-                Default is "scip" if available.
+                Default is "highs" if available.
             **solver_options: Solver options (time_limit, gap, verbose, etc.)
             
         Returns:
@@ -158,6 +159,8 @@ class Decoder:
             weights = np.ones(n) * float(weights)
         else:
             weights = np.asarray(weights, dtype=float)
+            if weights.shape != (n,):
+                raise ValueError(f"weights must have length {n} (got {weights.shape})")
         
         decoder._weights = weights
         
@@ -172,6 +175,7 @@ class Decoder:
         dem: Union['stim.DetectorErrorModel', str],
         solver: str = None,
         merge_parallel_edges: bool = True,
+        flatten_dem: bool = True,
         **solver_options
     ) -> 'Decoder':
         """
@@ -179,9 +183,19 @@ class Decoder:
         
         Args:
             dem: A stim.DetectorErrorModel or its string representation
-            solver: Solver name ("scip", "highs", etc.). Default is "scip".
+            solver: Solver name ("scip", "highs", etc.). Default is "highs".
             merge_parallel_edges: If True, merge parallel error mechanisms
+            flatten_dem: If True, call dem.flattened() to inline repeats and
+                apply detector shifts (may increase DEM size).
             **solver_options: Solver options (time_limit, gap, verbose, etc.)
+        
+        Note:
+            This parser reads only error(p) lines (tags are ignored). It ignores
+            detector/logical_observable metadata and applies shift_detectors
+            offsets. It raises on unsupported instructions such as repeat or
+            detector_separator. The '^' separator is treated as whitespace.
+            Repeat blocks are handled by flatten_dem=True (default), but can
+            cause large DEM expansions. Set flatten_dem=False to fail fast.
             
         Returns:
             Configured Decoder instance
@@ -198,7 +212,7 @@ class Decoder:
         decoder = cls()
         
         # Parse DEM
-        H, obs_matrix, weights = decoder._parse_dem(dem, merge_parallel_edges)
+        H, obs_matrix, weights = decoder._parse_dem(dem, merge_parallel_edges, flatten_dem)
         
         decoder._H = H
         decoder._weights = weights
@@ -214,6 +228,7 @@ class Decoder:
         cls,
         dem_path: Union[str, Path],
         solver: str = None,
+        flatten_dem: bool = True,
         **solver_options
     ) -> 'Decoder':
         """
@@ -222,6 +237,8 @@ class Decoder:
         Args:
             dem_path: Path to the .dem file
             solver: Solver name
+            flatten_dem: If True, call dem.flattened() to inline repeats and
+                apply detector shifts (may increase DEM size).
             **solver_options: Solver options
             
         Returns:
@@ -229,7 +246,9 @@ class Decoder:
         """
         dem_path = Path(dem_path)
         dem_str = dem_path.read_text()
-        return cls.from_stim_dem(dem_str, solver=solver, **solver_options)
+        return cls.from_stim_dem(
+            dem_str, solver=solver, flatten_dem=flatten_dem, **solver_options
+        )
     
     # =========================================================================
     # Solver Configuration
@@ -247,13 +266,12 @@ class Decoder:
         """
         Set or change the solver.
         
-        This is similar to JuMP's `set_optimizer()`. You can switch solvers
-        at any time without rebuilding the model.
+        You can switch solvers at any time without rebuilding the model.
         
         Args:
             solver: Solver name. Options:
-                - "scip": SCIP solver (default, recommended)
-                - "highs": HiGHS solver
+                - "highs": HiGHS solver (default)
+                - "scip": SCIP solver
                 - "gurobi": Gurobi (requires license)
                 - "cplex": IBM CPLEX (requires license)
                 - "cbc": COIN-OR CBC
@@ -325,6 +343,9 @@ class Decoder:
         Example:
             >>> correction = decoder.decode([1, 0, 1])
             >>> correction, weight = decoder.decode([1, 0, 1], return_weight=True)
+
+        Raises:
+            RuntimeError: If the solver fails to find a feasible solution.
         """
         if self._H is None:
             raise RuntimeError("Decoder not configured. Use from_parity_check_matrix() or from_stim_dem().")
@@ -479,8 +500,10 @@ class Decoder:
             TerminationCondition.feasible,
             TerminationCondition.maxTimeLimit,
         ):
-            # Return zero correction if infeasible
-            return np.zeros(n, dtype=np.uint8), float('inf')
+            self._last_objective = None
+            raise RuntimeError(
+                f"Solver terminated with status {results.solver.termination_condition}"
+            )
         
         # Extract solution
         correction = np.zeros(n, dtype=np.uint8)
@@ -501,12 +524,21 @@ class Decoder:
         probs: Union[float, np.ndarray, List[float]], 
         n: int
     ) -> np.ndarray:
-        """Convert error probabilities to log-likelihood ratio weights."""
+        """Convert error probabilities to log-likelihood ratio weights (p in (0, 0.5])."""
         if isinstance(probs, (int, float)):
             probs = np.ones(n) * float(probs)
         else:
             probs = np.asarray(probs, dtype=float)
-        
+
+        if probs.shape != (n,):
+            raise ValueError(f"error_probabilities must have length {n} (got {probs.shape})")
+        if np.any(probs <= 0) or np.any(probs >= 1):
+            raise ValueError("error_probabilities must be in the open interval (0, 1)")
+        if np.any(probs > 0.5):
+            raise ValueError(
+                "error_probabilities must be <= 0.5; pass explicit weights for p > 0.5"
+            )
+
         # Clip to avoid numerical issues
         probs = np.clip(probs, 1e-15, 1 - 1e-15)
         
@@ -516,9 +548,10 @@ class Decoder:
         return np.maximum(weights, 0.0)  # Keep non-negative for minimization
     
     def _parse_dem(
-        self, 
+        self,
         dem: Union['stim.DetectorErrorModel', str],
-        merge_parallel: bool
+        merge_parallel: bool,
+        flatten_dem: bool
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Parse a Stim DEM into H matrix, observable matrix, and weights."""
         try:
@@ -528,20 +561,53 @@ class Decoder:
         
         if isinstance(dem, str):
             dem = stim.DetectorErrorModel(dem)
+        if flatten_dem:
+            dem = dem.flattened()
         
         # Extract error mechanisms
         errors = []
         seen = {}  # For merging parallel edges
         
         dem_str = str(dem)
+        detector_offset = 0
         for line in dem_str.strip().split('\n'):
             line = line.strip()
-            if not line or line.startswith('#') or not line.startswith('error('):
+            if not line or line.startswith('#'):
                 continue
+            line_lower = line.lower()
+            if not line_lower.startswith('error'):
+                if line_lower.startswith('shift_detectors'):
+                    parts = line.split()
+                    if len(parts) != 2:
+                        raise ValueError(f"Invalid shift_detectors instruction: {line}")
+                    try:
+                        shift = int(parts[1])
+                    except ValueError as exc:
+                        raise ValueError(f"Invalid shift_detectors value: {line}") from exc
+                    if shift < 0:
+                        raise ValueError(f"shift_detectors must be non-negative: {line}")
+                    detector_offset += shift
+                    continue
+                if line_lower.startswith('repeat') or line == '}':
+                    raise ValueError(
+                        "Unsupported DEM instruction: repeat. "
+                        "Flatten the DEM first (e.g., dem = dem.flattened())."
+                    )
+                if line_lower.startswith('detector_separator'):
+                    raise ValueError(
+                        "Unsupported DEM instruction: detector_separator. "
+                        "Only error(p) lines are supported."
+                    )
+                if line_lower.startswith('detector') or line_lower.startswith('logical_observable'):
+                    continue
+                raise ValueError(f"Unsupported DEM instruction: {line}")
             
             # Parse error(p) D... L...
-            prob_start = line.index('(') + 1
-            prob_end = line.index(')')
+            try:
+                prob_start = line.index('(') + 1
+                prob_end = line.index(')')
+            except ValueError as exc:
+                raise ValueError(f"Invalid error instruction: {line}") from exc
             prob = float(line[prob_start:prob_end])
             
             if prob <= 0 or prob >= 1:
@@ -551,12 +617,18 @@ class Decoder:
             detectors = set()
             observables = set()
             
-            for target in targets_str.split():
+            for target in targets_str.replace("^", " ").split():
                 target = target.strip()
                 if target.startswith('D'):
-                    detectors.add(int(target[1:]))
+                    try:
+                        detectors.add(int(target[1:]) + detector_offset)
+                    except ValueError:
+                        continue
                 elif target.startswith('L'):
-                    observables.add(int(target[1:]))
+                    try:
+                        observables.add(int(target[1:]))
+                    except ValueError:
+                        continue
             
             if not detectors and not observables:
                 continue

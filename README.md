@@ -1,29 +1,15 @@
 # MIPDecoder
 
-An ILP-based Quantum Error Correction Decoder using **Pyomo** for solver-agnostic modeling — like JuMP for Python.
+An ILP-based Quantum Error Correction (QEC) decoder built on **Pyomo** for solver-agnostic optimization modeling.
 
 ## Overview
 
 MIPDecoder provides:
 
-- **JuMP-like solver abstraction** via Pyomo — write once, use any solver
+- **Solver-agnostic ILP modeling** via Pyomo — write once, use any supported solver
 - **PyMatching-like API** for quantum error correction decoding
-- **Easy solver switching**: SCIP (default), HiGHS, Gurobi, CPLEX, CBC, GLPK
+- **Easy solver switching**: HiGHS (default), SCIP, Gurobi, CPLEX, CBC, GLPK
 - **Support for parity-check matrix** and **Stim DetectorErrorModel** inputs
-
-## Why Pyomo?
-
-Just like JuMP in Julia uses MathOptInterface for solver abstraction, MIPDecoder uses **Pyomo** — no need to write separate backends for each solver:
-
-```python
-# Switch solvers with one line (like JuMP's set_optimizer)
-decoder.set_solver("scip")    # SCIP (default)
-decoder.set_solver("highs")   # HiGHS
-decoder.set_solver("gurobi")  # Gurobi
-decoder.set_solver("cplex")   # CPLEX
-decoder.set_solver("cbc")     # COIN-OR CBC
-decoder.set_solver("glpk")    # GLPK
-```
 
 ## Installation
 
@@ -40,12 +26,12 @@ pip install mipdecoder[stim]
 MIPDecoder uses Pyomo, which requires an external solver. Install at least one:
 
 ```bash
-# SCIP (recommended, open-source)
+# HiGHS (default, open-source, easy to install)
+pip install highspy
+
+# SCIP (open-source)
 # Download from: https://www.scipopt.org/
 # Or via conda: conda install -c conda-forge scip
-
-# HiGHS (open-source, easy to install)
-pip install highspy
 
 # CBC (open-source)
 # Ubuntu/Debian: apt install coinor-cbc
@@ -120,7 +106,7 @@ H = np.array([
     [0, 0, 0, 1, 1],
 ])
 
-# Create decoder (uses SCIP by default)
+# Create decoder (uses HiGHS by default)
 decoder = Decoder.from_parity_check_matrix(H)
 
 # Decode a syndrome
@@ -132,10 +118,10 @@ print(f"Correction: {correction}")
 ### Switching Solvers
 
 ```python
-# Use HiGHS instead of SCIP
-decoder = Decoder.from_parity_check_matrix(H, solver="highs")
+# Use SCIP instead of HiGHS
+decoder = Decoder.from_parity_check_matrix(H, solver="scip")
 
-# Or change solver later (like JuMP's set_optimizer)
+# Or change solver later
 decoder.set_solver("gurobi", time_limit=30)
 decoder.set_solver("cplex", gap=0.01)
 ```
@@ -169,6 +155,15 @@ for i in range(10):
     print(f"Shot {i}: predicted={predicted_obs}, actual={observables[i]}")
 ```
 
+#### Stim DEM Support Notes
+
+- Only `error(p)` lines are parsed; tags in `error[...]` are ignored. `detector` and
+  `logical_observable` metadata lines are ignored. `shift_detectors` offsets are applied.
+  `repeat` blocks are flattened by default; this can expand large DEMs.
+  `detector_separator` is unsupported and raises an error.
+- The `^` separator is treated as whitespace and does not change parsing.
+- If you want to fail fast instead of flattening, pass `flatten_dem=False`.
+
 ### Maximum-Likelihood Decoding with Weights
 
 ```python
@@ -185,6 +180,8 @@ syndrome = [1, 1]
 correction, weight = decoder.decode(syndrome, return_weight=True)
 print(f"ML correction: {correction}, weight: {weight}")
 ```
+
+Note: `error_probabilities` must be in (0, 0.5]; pass explicit `weights` for p > 0.5.
 
 ## Mathematical Formulation
 
@@ -206,7 +203,7 @@ minimize Σ_j w_j · e_j
 
 **Constraints (mod-2 linearization):**
 ```
-Σ_j H[i,j] · e_j = s_i + 2·a_i    for i = 0,...,m-1
+Σ_j H[i,j] · e_j - s_i = 2·a_i    for i = 0,...,m-1
 ```
 
 ## Solver Options
@@ -236,12 +233,12 @@ Main decoder class.
 
 **Class Methods:**
 - `from_parity_check_matrix(H, weights=None, error_probabilities=None, solver=None)` - Create from parity-check matrix
-- `from_stim_dem(dem, solver=None)` - Create from Stim DetectorErrorModel
+- `from_stim_dem(dem, solver=None, merge_parallel_edges=True, flatten_dem=True)` - Create from Stim DetectorErrorModel
 
 **Instance Methods:**
 - `decode(syndrome, return_weight=False)` - Decode a single syndrome
 - `decode_batch(syndromes)` - Decode multiple syndromes
-- `set_solver(name, **options)` - Switch solver (like JuMP's `set_optimizer`)
+- `set_solver(name, **options)` - Switch solver
 
 **Properties:**
 - `num_detectors` - Number of parity checks/detectors
@@ -258,36 +255,6 @@ from mipdecoder import get_available_solvers
 print(get_available_solvers())  # e.g., ['scip', 'highs', 'cbc']
 ```
 
-## Comparison with PyMatching
-
-| Feature | PyMatching | MIPDecoder |
-|---------|-----------|------------|
-| Algorithm | MWPM (Blossom) | ILP (Branch & Bound) |
-| Optimal | For graphlike codes | For all codes |
-| Speed | Very fast | Slower |
-| Solver | Built-in | Any (via Pyomo) |
-| Hyperedges | Decomposed | Native support |
-
-## Comparison with JuMP (Julia)
-
-MIPDecoder aims to provide a similar experience to JuMP:
-
-| JuMP (Julia) | MIPDecoder (Python) |
-|--------------|---------------------|
-| `Model(HiGHS.Optimizer)` | `Decoder.from_...(solver="highs")` |
-| `set_optimizer(model, SCIP.Optimizer)` | `decoder.set_solver("scip")` |
-| MathOptInterface | Pyomo |
-
 ## License
 
-Apache License 2.0
-
-## Citation
-
-```bibtex
-@software{mipdecoder,
-  title = {MIPDecoder: ILP-based Quantum Error Correction Decoder},
-  year = {2024},
-  url = {https://github.com/mipdecoder/mipdecoder}
-}
-```
+MIT License

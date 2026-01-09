@@ -4,7 +4,7 @@ Basic usage examples for MIPDecoder.
 This script demonstrates the core functionality:
 1. Decoding with parity-check matrices
 2. Decoding with Stim detector error models
-3. Switching solvers (like JuMP's set_optimizer)
+3. Switching solvers at runtime
 4. Maximum-likelihood decoding with weights
 """
 
@@ -97,11 +97,10 @@ def example_solver_switching():
     """
     Example: Switching between solvers.
     
-    This is similar to JuMP's set_optimizer() — you can switch
-    solvers without rebuilding the model.
+    You can switch solvers without rebuilding the model.
     """
     print("\n" + "=" * 60)
-    print("Example: Solver Switching (like JuMP's set_optimizer)")
+    print("Example: Solver Switching")
     print("=" * 60)
     
     available = get_available_solvers()
@@ -117,7 +116,7 @@ def example_solver_switching():
     for solver in available:
         print(f"\n--- Using {solver.upper()} ---")
         
-        # Switch solver (like JuMP's set_optimizer)
+        # Switch solver
         decoder.set_solver(solver, verbose=False)
         
         syndrome = [1, 0]
