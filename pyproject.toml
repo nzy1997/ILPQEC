@@ -48,9 +48,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ilpdecoder/ilpdecoder"
-Documentation = "https://github.com/ilpdecoder/ilpdecoder#readme"
-Repository = "https://github.com/ilpdecoder/ilpdecoder"
+Homepage = "https://github.com/nzy1997/ILPDecoder"
+Documentation = "https://github.com/nzy1997/ILPDecoder#readme"
+Repository = "https://github.com/nzy1997/ILPDecoder"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

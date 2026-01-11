@@ -1,5 +1,8 @@
 # ILPDecoder
 
+[![CI](https://github.com/nzy1997/ILPDecoder/actions/workflows/ci.yml/badge.svg)](https://github.com/nzy1997/ILPDecoder/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/nzy1997/ILPDecoder/branch/main/graph/badge.svg)](https://codecov.io/gh/nzy1997/ILPDecoder)
+
 An ILP-based Quantum Error Correction (QEC) decoder built on **Pyomo** for solver-agnostic optimization modeling.
 
 ## Overview
@@ -52,8 +55,8 @@ pip install highspy
 
 ```bash
 # Clone the repository
-git clone https://github.com/ilpdecoder/ilpdecoder
-cd ilpdecoder
+git clone https://github.com/nzy1997/ILPDecoder
+cd ILPDecoder
 
 # Create virtual environment (using uv)
 uv venv
@@ -88,6 +91,7 @@ python main.py
 ```bash
 python examples/basic_usage.py
 python examples/surface_code_example.py
+benchmark/.venv/bin/python benchmark/benchmark_decoders.py --shots 10000 --distance 3 --rounds 3 --noise 0.01
 ```
 
 ## Quick Start
@@ -183,9 +187,55 @@ print(f"ML correction: {correction}, weight: {weight}")
 
 Note: `error_probabilities` must be in (0, 0.5]; pass explicit `weights` for p > 0.5.
 
-## Mathematical Formulation
+## Benchmark
 
-See `doc/mathematical-formulation.md`.
+Quick decoder comparison on a circuit-level rotated surface code memory task:
+
+```bash
+benchmark/.venv/bin/python benchmark/benchmark_decoders.py --shots 10000 --distance 3 --rounds 3 --noise 0.01
+```
+
+Results from a local macOS arm64 run (your numbers will vary):
+
+| Decoder | Time (ms/shot) | Logical Error Rate |
+|--------|---------------|--------------------|
+| ILPDecoder | 8.7606 | 1.520% |
+| MWPM (pymatching) | 0.0033 | 2.090% |
+| BPOSD (ldpc) | 0.0322 | 7.400% |
+
+Notes:
+- The benchmark uses `surface_code:rotated_memory_x` with `distance=3`, `rounds=3`,
+  `noise=0.01`, and `shots=10000`.
+- BPOSD runs with `max_iter=50`, `osd_order=0`, and `bp_method=minimum_sum`.
+- Install optional deps for the benchmark: `pip install stim pymatching ldpc highspy`.
+
+Code capacity surface code benchmark (data errors only, perfect syndrome):
+
+```bash
+benchmark/.venv/bin/python benchmark/benchmark_decoders.py --noise-model code_capacity --shots 10000 --distance 3 --rounds 1 --noise 0.01
+```
+
+Results from a local macOS arm64 run (your numbers will vary):
+
+| Decoder | Time (ms/shot) | Logical Error Rate |
+|--------|---------------|--------------------|
+| ILPDecoder | 5.6967 | 0.060% |
+| MWPM (pymatching) | 0.0030 | 0.060% |
+| BPOSD (ldpc) | 0.0027 | 0.060% |
+
+Color code benchmark (Stim default `color_code:memory_xyz`):
+
+```bash
+benchmark/.venv/bin/python benchmark/benchmark_decoders.py --code-task color_code:memory_xyz --shots 10000 --distance 3 --rounds 3 --noise 0.01
+```
+
+Results from a local macOS arm64 run (your numbers will vary):
+
+| Decoder | Time (ms/shot) | Logical Error Rate |
+|--------|---------------|--------------------|
+| ILPDecoder | 5.2864 | 4.680% |
+| MWPM (pymatching) | 0.0031 | 13.250% |
+| BPOSD (ldpc) | 0.0100 | 9.810% |
 
 ## Solver Options
 

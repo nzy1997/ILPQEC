@@ -51,6 +51,20 @@ error(0.2) D1 ^ D2
     assert decoder.num_observables == 1
 
 
+def test_dem_caret_cancels_duplicate_observables():
+    """Duplicate observables across caret components cancel out (XOR)."""
+    pytest.importorskip("stim")
+    dem_str = """
+error(0.1) D0 L0 ^ D1 L0
+error(0.1) D1 L0
+"""
+    decoder = Decoder.from_stim_dem(dem_str, solver="highs")
+    obs_matrix = decoder._observable_matrix
+    assert obs_matrix.shape == (1, 2)
+    assert obs_matrix[0, 0] == 0
+    assert obs_matrix[0, 1] == 1
+
+
 def test_dem_parses_tagged_error_lines():
     """Tagged error lines are accepted and tags are ignored."""
     pytest.importorskip("stim")

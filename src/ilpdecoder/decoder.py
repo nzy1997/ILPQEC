@@ -621,14 +621,22 @@ class Decoder:
                 target = target.strip()
                 if target.startswith('D'):
                     try:
-                        detectors.add(int(target[1:]) + detector_offset)
+                        det_id = int(target[1:]) + detector_offset
                     except ValueError:
                         continue
+                    if det_id in detectors:
+                        detectors.remove(det_id)
+                    else:
+                        detectors.add(det_id)
                 elif target.startswith('L'):
                     try:
-                        observables.add(int(target[1:]))
+                        obs_id = int(target[1:])
                     except ValueError:
                         continue
+                    if obs_id in observables:
+                        observables.remove(obs_id)
+                    else:
+                        observables.add(obs_id)
             
             if not detectors and not observables:
                 continue
@@ -652,8 +660,18 @@ class Decoder:
         
         # Determine dimensions
         num_errors = len(errors)
-        num_detectors = max(max(e[1]) for e in errors if e[1]) + 1 if any(e[1] for e in errors) else 0
-        num_observables = max(max(e[2]) for e in errors if e[2]) + 1 if any(e[2] for e in errors) else 0
+        if hasattr(dem, "num_detectors"):
+            num_detectors = int(dem.num_detectors)
+        else:
+            num_detectors = (
+                max(max(e[1]) for e in errors if e[1]) + 1 if any(e[1] for e in errors) else 0
+            )
+        if hasattr(dem, "num_observables"):
+            num_observables = int(dem.num_observables)
+        else:
+            num_observables = (
+                max(max(e[2]) for e in errors if e[2]) + 1 if any(e[2] for e in errors) else 0
+            )
         
         # Build matrices
         H = np.zeros((num_detectors, num_errors), dtype=np.uint8)
