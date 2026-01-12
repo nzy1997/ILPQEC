@@ -27,7 +27,9 @@ Example Usage:
     correction, observables = decoder.decode(detector_outcomes)
 """
 
-from typing import Union, List, Optional, Tuple, Dict, Any
+from __future__ import annotations
+
+from typing import Union, List, Optional, Tuple, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 import math
 
@@ -52,6 +54,9 @@ from ilpdecoder.solver import (
     get_pyomo_solver_name,
     get_available_solvers,
 )
+
+if TYPE_CHECKING:
+    from scipy.sparse import spmatrix
 
 
 class Decoder:
