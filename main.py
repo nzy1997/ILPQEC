@@ -10,7 +10,7 @@ from ilpdecoder import Decoder, get_available_solvers
 
 def main():
     """Run basic functionality test."""
-    print("ILPDecoder - ILP-based QEC Decoder (using Pyomo)")
+    print("ILPDecoder - ILP-based QEC Decoder (direct HiGHS backend)")
     print("=" * 50)
     
     available = get_available_solvers()
@@ -19,10 +19,9 @@ def main():
     if not available:
         print("\nNo solver available!")
         print("Please install one of:")
-        print("  - SCIP: https://www.scipopt.org/")
         print("  - HiGHS: pip install highspy")
-        print("  - CBC: apt install coinor-cbc")
-        print("  - GLPK: apt install glpk-utils")
+        print("  - Gurobi: pip install ilpdecoder[gurobi]")
+        print("  - Pyomo solvers: pip install ilpdecoder[pyomo]")
         return 1
     
     # Test with simple repetition code

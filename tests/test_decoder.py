@@ -68,12 +68,29 @@ class TestDecoderFromParityCheck:
         
         np.testing.assert_array_equal(correction, [0, 0, 0])
 
+    def test_decode_direct_gurobi(self):
+        """Test direct Gurobi decoding when available."""
+        gp = pytest.importorskip("gurobipy")
+        try:
+            env = gp.Env(empty=True)
+            env.setParam("OutputFlag", 0)
+            env.start()
+            if hasattr(env, "dispose"):
+                env.dispose()
+        except gp.GurobiError:
+            pytest.skip("Gurobi license not available")
+        H = np.array([[1]], dtype=np.uint8)
+        decoder = Decoder.from_parity_check_matrix(H, solver="gurobi", direct=True)
+        correction = decoder.decode([1])
+        np.testing.assert_array_equal(correction, [1])
+
 
 class TestDecoderFromDEM:
     """Test Decoder with Stim DEM input."""
     
     def test_simple_dem_decode(self):
         """Test decoding with a simple DEM."""
+        pytest.importorskip("stim")
         dem_str = """
 error(0.1) D0 L0
 error(0.1) D0 D1
@@ -91,6 +108,7 @@ error(0.1) D1 L1
     
     def test_dem_observable_prediction(self):
         """Test that observable predictions are correct."""
+        pytest.importorskip("stim")
         dem_str = """
 error(0.1) D0 L0
 error(0.1) D1 L1
@@ -165,6 +183,7 @@ class TestDecoderProperties:
     
     def test_dem_properties(self):
         """Test properties for DEM decoder."""
+        pytest.importorskip("stim")
         dem_str = """
 error(0.1) D0 L0
 error(0.1) D0 D1

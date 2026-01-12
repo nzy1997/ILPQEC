@@ -149,6 +149,17 @@ def main():
     parser.add_argument("--shots", type=int, default=100)
     parser.add_argument("--noise", type=float, default=0.01)
     parser.add_argument("--solver", type=str, default=None)
+    parser.add_argument(
+        "--compare-ilp-solvers",
+        action="store_true",
+        help="Benchmark all available ILP solvers (excluding CPLEX).",
+    )
+    parser.add_argument(
+        "--ilp-solvers",
+        type=str,
+        default="auto",
+        help="Comma-separated ILP solvers to compare (auto=available).",
+    )
     args = parser.parse_args()
 
     try:
@@ -202,21 +213,46 @@ def main():
 
     ilp_decoder = None
     available_solvers = [s.lower() for s in get_available_solvers()]
-    if not available_solvers:
-        print("ILPDecoder   skipped (no solver available)")
-    elif args.solver and args.solver.lower() not in available_solvers:
-        print(f"ILPDecoder   skipped (solver '{args.solver}' not available)")
+    ilp_solver_order = ["highs", "scip", "gurobi", "cbc", "glpk"]
+    if args.compare_ilp_solvers:
+        if args.ilp_solvers.strip().lower() == "auto":
+            selected_solvers = [s for s in ilp_solver_order if s in available_solvers]
+        else:
+            requested = [s.strip().lower() for s in args.ilp_solvers.split(",") if s.strip()]
+            selected_solvers = [s for s in requested if s in available_solvers]
+            missing = [s for s in requested if s not in available_solvers]
+            if missing:
+                print(f"ILP solvers unavailable: {', '.join(missing)}")
+        if not selected_solvers:
+            print("ILP solvers skipped (no solver available)")
+        else:
+            for solver in selected_solvers:
+                try:
+                    ilp_decoder = Decoder.from_stim_dem(dem, solver=solver)
+
+                    def ilp_decode(det, _decoder=ilp_decoder):
+                        _, pred = _decoder.decode(det)
+                        return pred
+
+                    benchmark(f"ILP[{solver}]", detections, observables, ilp_decode)
+                except Exception as exc:
+                    print(f"ILP[{solver}]   skipped ({exc})")
     else:
-        try:
-            ilp_decoder = Decoder.from_stim_dem(dem, solver=args.solver)
+        if not available_solvers:
+            print("ILPDecoder   skipped (no solver available)")
+        elif args.solver and args.solver.lower() not in available_solvers:
+            print(f"ILPDecoder   skipped (solver '{args.solver}' not available)")
+        else:
+            try:
+                ilp_decoder = Decoder.from_stim_dem(dem, solver=args.solver)
 
-            def ilp_decode(det):
-                _, pred = ilp_decoder.decode(det)
-                return pred
+                def ilp_decode(det):
+                    _, pred = ilp_decoder.decode(det)
+                    return pred
 
-            benchmark("ILPDecoder", detections, observables, ilp_decode)
-        except Exception as exc:
-            print(f"ILPDecoder   skipped ({exc})")
+                benchmark("ILPDecoder", detections, observables, ilp_decode)
+            except Exception as exc:
+                print(f"ILPDecoder   skipped ({exc})")
 
     try:
         mwpm = build_pymatching(dem)

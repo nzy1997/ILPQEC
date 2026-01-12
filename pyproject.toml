@@ -31,10 +31,16 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.20",
-    "pyomo>=6.0",
+    "highspy>=1.10",
 ]
 
 [project.optional-dependencies]
+pyomo = [
+    "pyomo>=6.0",
+]
+gurobi = [
+    "gurobipy>=10.0; python_version < '3.13'",
+]
 scipy = [
     "scipy>=1.7",
 ]
@@ -46,6 +52,7 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1",
+    "pyomo>=6.0",
     "scipy>=1.7",
     "stim>=1.12",
 ]

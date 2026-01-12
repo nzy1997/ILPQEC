@@ -1,12 +1,15 @@
 """
-Main Decoder class using Pyomo for ILP modeling.
+Main Decoder class for ILP-based decoding.
 
 This module provides the primary user-facing interface for ILP-based
-quantum error correction decoding. Uses Pyomo for solver-agnostic
-modeling.
+quantum error correction decoding. Uses a direct HiGHS backend by
+default, with an optional direct Gurobi backend and a Pyomo backend
+for other solvers.
 
 Key Features:
-- Solver-agnostic modeling via Pyomo
+- Direct HiGHS backend for fast default decoding
+- Optional direct Gurobi backend for licensed users
+- Optional Pyomo modeling for other solvers
 - Multiple construction methods (from_parity_check_matrix, from_stim_dem)
 - Easy solver switching (scip, highs, gurobi, cplex, cbc, glpk)
 - Maximum-likelihood and minimum-weight decoding
@@ -16,8 +19,8 @@ Example Usage:
     decoder = Decoder.from_parity_check_matrix(H)
     correction = decoder.decode(syndrome)
     
-    # Use different solver
-    decoder = Decoder.from_parity_check_matrix(H, solver="highs")
+    # Use different solver (requires Pyomo extra)
+    decoder = Decoder.from_parity_check_matrix(H, solver="scip", direct=False)
     
     # Change solver at runtime
     decoder.set_solver("gurobi", time_limit=60)
@@ -35,24 +38,14 @@ import math
 
 import numpy as np
 
-from pyomo.environ import (
-    ConcreteModel,
-    Var,
-    Constraint,
-    Objective,
-    Binary,
-    NonNegativeIntegers,
-    minimize,
-    value,
-    SolverFactory,
-    TerminationCondition,
-)
-
 from ilpdecoder.solver import (
     SolverConfig,
     get_default_solver,
     get_pyomo_solver_name,
     get_available_solvers,
+    require_pyomo,
+    is_pyomo_available,
+    is_gurobi_available,
 )
 
 if TYPE_CHECKING:
@@ -61,22 +54,23 @@ if TYPE_CHECKING:
 
 class Decoder:
     """
-    ILP-based quantum error correction decoder using Pyomo.
+    ILP-based quantum error correction decoder.
     
     This class provides a PyMatching-like API for decoding using
-    Integer Linear Programming. It uses Pyomo for solver-agnostic
-    modeling.
+    Integer Linear Programming. It uses a direct HiGHS backend by
+    default, with an optional direct Gurobi backend and a Pyomo backend
+    for other solvers.
     
     Solver switching is trivial - just call set_solver() with a different
     solver name. No need to rebuild the model.
     
     Supported Solvers:
-        - highs: HiGHS solver (default)
-        - scip: SCIP solver
-        - gurobi: Gurobi (requires license)
-        - cplex: IBM CPLEX (requires license)
-        - cbc: COIN-OR CBC
-        - glpk: GNU Linear Programming Kit
+        - highs: HiGHS solver (default, direct backend)
+        - gurobi: Gurobi solver (direct backend, requires license)
+        - scip: SCIP solver (Pyomo required)
+        - cplex: IBM CPLEX (requires license, Pyomo required)
+        - cbc: COIN-OR CBC (Pyomo required)
+        - glpk: GNU Linear Programming Kit (Pyomo required)
     
     Attributes:
         num_detectors: Number of parity checks / detectors
@@ -98,7 +92,12 @@ class Decoder:
         
         # Solver configuration
         self._solver_config = SolverConfig()
-        
+        self._direct_highs_solver = None
+        self._direct_gurobi_solver = None
+        self._pyomo_model = None
+        self._pyomo_solver = None
+        self._pyomo_solver_name = None
+
         # Last solution info
         self._last_objective: Optional[float] = None
         self._last_status: Optional[str] = None
@@ -127,9 +126,9 @@ class Decoder:
             error_probabilities: Error probability for each mechanism.
                 Used to compute log-likelihood weights if weights not given.
                 Probabilities must be in (0, 0.5].
-            solver: Solver name ("scip", "highs", "gurobi", etc.)
-                Default is "highs" if available.
-            **solver_options: Solver options (time_limit, gap, verbose, etc.)
+            solver: Solver name ("highs", "scip", "gurobi", etc.)
+                Default is "highs" with the direct HiGHS backend.
+            **solver_options: Solver options (time_limit, gap, verbose, direct, etc.)
             
         Returns:
             Configured Decoder instance
@@ -141,6 +140,8 @@ class Decoder:
             
             >>> # With different solver
             >>> decoder = Decoder.from_parity_check_matrix(H, solver="highs")
+            >>> # Use Pyomo-backed solvers
+            >>> decoder = Decoder.from_parity_check_matrix(H, solver="scip", direct=False)
         """
         decoder = cls()
         
@@ -196,11 +197,11 @@ class Decoder:
         
         Args:
             dem: A stim.DetectorErrorModel or its string representation
-            solver: Solver name ("scip", "highs", etc.). Default is "highs".
+            solver: Solver name ("highs", "scip", etc.). Default is "highs".
             merge_parallel_edges: If True, merge parallel error mechanisms
             flatten_dem: If True, call dem.flattened() to inline repeats and
                 apply detector shifts (may increase DEM size).
-            **solver_options: Solver options (time_limit, gap, verbose, etc.)
+            **solver_options: Solver options (time_limit, gap, verbose, direct, etc.)
         
         Note:
             This parser reads only error(p) lines (tags are ignored). It ignores
@@ -220,6 +221,8 @@ class Decoder:
             ...                                  after_clifford_depolarization=0.01)
             >>> dem = circuit.detector_error_model(decompose_errors=True)
             >>> decoder = Decoder.from_stim_dem(dem)
+            >>> # Pyomo-backed solver
+            >>> decoder = Decoder.from_stim_dem(dem, solver="scip", direct=False)
             >>> correction, observables = decoder.decode(detector_outcomes)
         """
         decoder = cls()
@@ -274,6 +277,7 @@ class Decoder:
         gap: float = None,
         threads: int = None,
         verbose: bool = False,
+        direct: Optional[bool] = None,
         **options
     ):
         """
@@ -283,16 +287,19 @@ class Decoder:
         
         Args:
             solver: Solver name. Options:
-                - "highs": HiGHS solver (default)
-                - "scip": SCIP solver
-                - "gurobi": Gurobi (requires license)
-                - "cplex": IBM CPLEX (requires license)
-                - "cbc": COIN-OR CBC
-                - "glpk": GNU Linear Programming Kit
+                - "highs": HiGHS solver (default, direct backend)
+                - "gurobi": Gurobi solver (direct backend, requires license)
+                - "scip": SCIP solver (Pyomo required)
+                - "cplex": IBM CPLEX (requires license, Pyomo required)
+                - "cbc": COIN-OR CBC (Pyomo required)
+                - "glpk": GNU Linear Programming Kit (Pyomo required)
             time_limit: Maximum solving time in seconds
             gap: Relative ILP gap tolerance
             threads: Number of threads (solver-dependent)
             verbose: Print solver output
+            direct: Use a direct backend when available (HiGHS/Gurobi).
+                Defaults to True for HiGHS. For Gurobi, defaults to True
+                when gurobipy is installed.
             **options: Additional solver-specific options
             
         Example:
@@ -302,15 +309,56 @@ class Decoder:
         """
         if solver is None:
             solver = get_default_solver()
-        
+        solver_name = solver.lower()
+        if direct is None:
+            if solver_name == "highs":
+                direct = True
+            elif solver_name == "gurobi":
+                direct = is_gurobi_available()
+            else:
+                direct = False
+        if direct:
+            if solver_name == "highs":
+                pass
+            elif solver_name == "gurobi":
+                if not is_gurobi_available():
+                    raise ImportError(
+                        "Direct Gurobi backend requires gurobipy. "
+                        "Install with: pip install ilpdecoder[gurobi]"
+                    )
+            else:
+                raise ValueError("Direct backend currently supports HiGHS and Gurobi only.")
+        if not direct and not is_pyomo_available():
+            if solver_name == "highs":
+                message = (
+                    "Pyomo is required for the Pyomo HiGHS backend. "
+                    "Install with: pip install ilpdecoder[pyomo]"
+                )
+            elif solver_name == "gurobi":
+                message = (
+                    "Gurobi requires gurobipy (direct backend) or Pyomo. "
+                    "Install with: pip install ilpdecoder[gurobi] or ilpdecoder[pyomo]"
+                )
+            else:
+                message = (
+                    "Pyomo is required for non-HiGHS solvers. "
+                    "Install with: pip install ilpdecoder[pyomo]"
+                )
+            raise ImportError(message)
+
         self._solver_config = SolverConfig(
-            name=solver.lower(),
+            name=solver_name,
             time_limit=time_limit,
             gap=gap,
             threads=threads,
             verbose=verbose,
+            direct=direct,
             options=options
         )
+        self._direct_highs_solver = None
+        self._direct_gurobi_solver = None
+        self._pyomo_solver = None
+        self._pyomo_solver_name = None
     
     def get_solver_options(self) -> Dict[str, Any]:
         """Get current solver configuration as a dictionary."""
@@ -320,6 +368,7 @@ class Decoder:
             "gap": self._solver_config.gap,
             "threads": self._solver_config.threads,
             "verbose": self._solver_config.verbose,
+            "direct": self._solver_config.direct,
             **self._solver_config.options
         }
     
@@ -365,8 +414,16 @@ class Decoder:
         
         syndrome = np.asarray(syndrome, dtype=np.uint8) % 2
         
-        # Build and solve Pyomo model
-        correction, objective = self._solve_ilp(syndrome)
+        # Solve ILP (direct backend or Pyomo backend)
+        if self._solver_config.direct:
+            if self._solver_config.name == "highs":
+                correction, objective = self._solve_direct_highs(syndrome)
+            elif self._solver_config.name == "gurobi":
+                correction, objective = self._solve_direct_gurobi(syndrome)
+            else:
+                raise ValueError("Direct backend currently supports HiGHS and Gurobi only.")
+        else:
+            correction, objective = self._solve_ilp(syndrome)
         
         # For DEM, compute observable predictions
         if self._observable_matrix is not None:
@@ -455,51 +512,36 @@ class Decoder:
             Constraints (mod-2 linearization):
                 Σ_j H[i,j] * e[j] = syndrome[i] + 2 * a[i]  for all i
         """
+        require_pyomo()
+        from pyomo.environ import SolverFactory, TerminationCondition, value
+
         H = self._H
-        weights = self._weights
         m, n = H.shape
         
-        # Create Pyomo model
-        model = ConcreteModel()
-        
-        # Error variables: e[j] ∈ {0,1}
-        model.e = Var(range(n), within=Binary)
-        
-        # Auxiliary variables for mod-2 linearization: a[i] ∈ Z≥0
-        # Upper bound: max value of sum H[i,:] is sum of row, so a[i] <= sum(H[i,:]) // 2
-        def aux_bounds(model, i):
-            max_sum = int(np.sum(H[i, :]))
-            return (0, max(0, (max_sum - syndrome[i]) // 2))
-        
-        model.a = Var(range(m), within=NonNegativeIntegers, bounds=aux_bounds)
-        
-        # Objective: minimize weighted errors
-        model.obj = Objective(
-            expr=sum(weights[j] * model.e[j] for j in range(n)),
-            sense=minimize
-        )
-        
-        # Constraints: H @ e = syndrome + 2 * a (mod-2 linearization)
-        def syndrome_constraint(model, i):
-            lhs = sum(int(H[i, j]) * model.e[j] for j in range(n) if H[i, j] != 0)
-            return lhs == int(syndrome[i]) + 2 * model.a[i]
-        
-        model.syndrome_cons = Constraint(range(m), rule=syndrome_constraint)
+        if self._pyomo_model is None:
+            self._pyomo_model = self._build_pyomo_model()
+        model = self._pyomo_model
+        for i in range(m):
+            model.syndrome_rhs[i] = int(syndrome[i])
         
         # Get solver
         solver_name = get_pyomo_solver_name(self._solver_config.name)
-        solver = SolverFactory(solver_name)
-        
-        if not solver.available():
-            raise RuntimeError(
-                f"Solver '{self._solver_config.name}' is not available. "
-                f"Available solvers: {get_available_solvers()}"
-            )
-        
-        # Set solver options
-        options = self._solver_config.to_pyomo_options()
-        for key, val in options.items():
-            solver.options[key] = val
+        solver = self._pyomo_solver
+        if solver is None or solver_name != self._pyomo_solver_name:
+            solver = SolverFactory(solver_name)
+            if hasattr(solver, "_version_timeout"):
+                # SCIP can take a few seconds to answer --version on some installs.
+                solver._version_timeout = max(getattr(solver, "_version_timeout", 0), 10)
+            if not solver.available():
+                raise RuntimeError(
+                    f"Solver '{self._solver_config.name}' is not available. "
+                    f"Available solvers: {get_available_solvers()}"
+                )
+            options = self._solver_config.to_pyomo_options()
+            for key, val in options.items():
+                solver.options[key] = val
+            self._pyomo_solver = solver
+            self._pyomo_solver_name = solver_name
         
         # Solve
         tee = self._solver_config.verbose
@@ -527,6 +569,67 @@ class Decoder:
         self._last_objective = value(model.obj)
         
         return correction, self._last_objective
+
+    def _build_pyomo_model(self) -> Any:
+        require_pyomo()
+        from pyomo.environ import (
+            ConcreteModel,
+            Var,
+            Param,
+            Constraint,
+            Objective,
+            Binary,
+            NonNegativeIntegers,
+            minimize,
+        )
+
+        H = self._H
+        weights = self._weights
+        m, n = H.shape
+        row_sums = np.sum(H, axis=1).astype(int)
+
+        model = ConcreteModel()
+        model.e = Var(range(n), within=Binary)
+
+        def aux_bounds(model, i):
+            return (0, int(row_sums[i] // 2))
+
+        model.a = Var(range(m), within=NonNegativeIntegers, bounds=aux_bounds)
+        model.syndrome_rhs = Param(range(m), initialize=0, mutable=True)
+
+        model.obj = Objective(
+            expr=sum(weights[j] * model.e[j] for j in range(n)),
+            sense=minimize
+        )
+
+        def syndrome_constraint(model, i):
+            lhs = sum(int(H[i, j]) * model.e[j] for j in range(n) if H[i, j] != 0)
+            return lhs == model.syndrome_rhs[i] + 2 * model.a[i]
+
+        model.syndrome_cons = Constraint(range(m), rule=syndrome_constraint)
+        return model
+
+    def _solve_direct_highs(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Solve the ILP using a direct HiGHS model reused across shots."""
+        if self._direct_highs_solver is None:
+            self._direct_highs_solver = _DirectHighsSolver(
+                self._H, self._weights, self._solver_config
+            )
+        correction, objective, status = self._direct_highs_solver.solve(syndrome)
+        self._last_status = status
+        self._last_objective = objective
+        return correction, objective
+
+    def _solve_direct_gurobi(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Solve the ILP using a direct Gurobi model reused across shots."""
+        if self._direct_gurobi_solver is None:
+            self._direct_gurobi_solver = _DirectGurobiSolver(
+                self._H, self._weights, self._solver_config
+            )
+        correction, objective, status = self._direct_gurobi_solver.solve(syndrome)
+        self._last_status = status
+        self._last_objective = objective
+        return correction, objective
     
     # =========================================================================
     # Helper Methods
@@ -758,3 +861,243 @@ class Decoder:
             f"<Decoder: {self.num_detectors} checks, {self.num_errors} errors, "
             f"solver={self.solver_name}>"
         )
+
+
+class _DirectHighsSolver:
+    def __init__(self, H: np.ndarray, weights: np.ndarray, config: SolverConfig):
+        try:
+            from highspy import (
+                Highs,
+                HighsLp,
+                HighsSparseMatrix,
+                HighsVarType,
+                MatrixFormat,
+                HighsStatus,
+                HighsModelStatus,
+            )
+        except Exception as exc:
+            raise ImportError(
+                "Direct HiGHS backend requires highspy. Install with: pip install highspy"
+            ) from exc
+
+        self._HighsStatus = HighsStatus
+        self._HighsModelStatus = HighsModelStatus
+        self._HighsLp = HighsLp
+        self._HighsSparseMatrix = HighsSparseMatrix
+        self._HighsVarType = HighsVarType
+        self._MatrixFormat = MatrixFormat
+
+        self._num_rows, self._num_errors = H.shape
+        self._num_cols = self._num_errors + self._num_rows
+        self._highs = Highs()
+        self._configure_options(config)
+        self._build_model(H, weights)
+
+    def _configure_options(self, config: SolverConfig) -> None:
+        self._set_option("output_flag", bool(config.verbose))
+        if config.time_limit is not None:
+            self._set_option("time_limit", float(config.time_limit))
+        if config.gap is not None:
+            self._set_option("mip_rel_gap", float(config.gap))
+        if config.threads is not None:
+            self._set_option("threads", int(config.threads))
+        for key, value in config.options.items():
+            self._set_option(key, value)
+
+    def _set_option(self, key: str, value: Any) -> None:
+        status = self._highs.setOptionValue(key, value)
+        if status != self._HighsStatus.kOk:
+            raise ValueError(f"HiGHS rejected option '{key}'")
+
+    def _build_model(self, H: np.ndarray, weights: np.ndarray) -> None:
+        H = np.asarray(H, dtype=np.uint8)
+        weights = np.asarray(weights, dtype=float)
+        m, n = H.shape
+        row_sums = H.sum(axis=1).astype(int)
+
+        col_cost = [0.0] * self._num_cols
+        col_lower = [0.0] * self._num_cols
+        col_upper = [0.0] * self._num_cols
+        integrality = [self._HighsVarType.kInteger] * self._num_cols
+
+        for j in range(n):
+            col_cost[j] = float(weights[j])
+            col_upper[j] = 1.0
+
+        for i in range(m):
+            idx = n + i
+            col_upper[idx] = float(row_sums[i] // 2)
+
+        row_lower = [0.0] * m
+        row_upper = [0.0] * m
+
+        starts = [0]
+        indices = []
+        values = []
+
+        for j in range(n):
+            rows = np.flatnonzero(H[:, j])
+            for r in rows:
+                indices.append(int(r))
+                values.append(1.0)
+            starts.append(len(indices))
+
+        for i in range(m):
+            indices.append(int(i))
+            values.append(-2.0)
+            starts.append(len(indices))
+
+        mat = self._HighsSparseMatrix()
+        mat.num_row_ = m
+        mat.num_col_ = self._num_cols
+        mat.start_ = starts
+        mat.index_ = indices
+        mat.value_ = values
+        mat.format_ = self._MatrixFormat.kColwise
+
+        lp = self._HighsLp()
+        lp.num_col_ = self._num_cols
+        lp.num_row_ = m
+        lp.col_cost_ = col_cost
+        lp.col_lower_ = col_lower
+        lp.col_upper_ = col_upper
+        lp.row_lower_ = row_lower
+        lp.row_upper_ = row_upper
+        lp.integrality_ = integrality
+        lp.a_matrix_ = mat
+
+        status = self._highs.passModel(lp)
+        if status != self._HighsStatus.kOk:
+            raise RuntimeError("Failed to initialize HiGHS model.")
+
+    def solve(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float, str]:
+        if syndrome.shape[0] != self._num_rows:
+            raise ValueError(
+                f"Syndrome length {syndrome.shape[0]} does not match {self._num_rows}"
+            )
+        for i in range(self._num_rows):
+            s = float(syndrome[i])
+            status = self._highs.changeRowBounds(i, s, s)
+            if status != self._HighsStatus.kOk:
+                raise RuntimeError("Failed to update HiGHS row bounds.")
+
+        status = self._highs.run()
+        if status != self._HighsStatus.kOk:
+            raise RuntimeError("HiGHS failed to solve the model.")
+
+        model_status = self._highs.getModelStatus()
+        if model_status not in (
+            self._HighsModelStatus.kOptimal,
+            self._HighsModelStatus.kTimeLimit,
+            self._HighsModelStatus.kObjectiveBound,
+            self._HighsModelStatus.kObjectiveTarget,
+            self._HighsModelStatus.kSolutionLimit,
+        ):
+            raise RuntimeError(f"HiGHS terminated with status {model_status}")
+
+        solution = self._highs.getSolution()
+        values = np.asarray(solution.col_value[: self._num_errors], dtype=float)
+        correction = (values > 0.5).astype(np.uint8)
+        objective = float(self._highs.getObjectiveValue())
+        return correction, objective, str(model_status)
+
+
+class _DirectGurobiSolver:
+    def __init__(self, H: np.ndarray, weights: np.ndarray, config: SolverConfig):
+        try:
+            import gurobipy as gp
+            from gurobipy import GRB
+        except Exception as exc:
+            raise ImportError(
+                "Direct Gurobi backend requires gurobipy. "
+                "Install with: pip install ilpdecoder[gurobi]"
+            ) from exc
+
+        self._gp = gp
+        self._GRB = GRB
+        self._num_rows, self._num_errors = H.shape
+        self._env = self._start_env(config)
+        self._model = gp.Model(env=self._env)
+        self._configure_options(config)
+        self._build_model(H, weights)
+
+    def _start_env(self, config: SolverConfig):
+        try:
+            env = self._gp.Env(empty=True)
+            env.setParam("OutputFlag", int(bool(config.verbose)))
+            env.start()
+            return env
+        except self._gp.GurobiError as exc:
+            msg = str(exc).lower()
+            err = getattr(exc, "errno", None)
+            if err in {10009, 10010, 10011, 10015} or "license" in msg:
+                raise RuntimeError(
+                    "Gurobi license not found or not valid. "
+                    "Set GRB_LICENSE_FILE or run grbgetkey."
+                ) from exc
+            raise
+
+    def _configure_options(self, config: SolverConfig) -> None:
+        self._set_param("OutputFlag", int(bool(config.verbose)))
+        if config.time_limit is not None:
+            self._set_param("TimeLimit", float(config.time_limit))
+        if config.gap is not None:
+            self._set_param("MIPGap", float(config.gap))
+        if config.threads is not None:
+            self._set_param("Threads", int(config.threads))
+        for key, value in config.options.items():
+            self._set_param(key, value)
+
+    def _set_param(self, key: str, value: Any) -> None:
+        try:
+            self._model.setParam(key, value)
+        except Exception as exc:
+            raise ValueError(f"Gurobi rejected parameter '{key}'") from exc
+
+    def _build_model(self, H: np.ndarray, weights: np.ndarray) -> None:
+        H = np.asarray(H, dtype=np.uint8)
+        weights = np.asarray(weights, dtype=float)
+        m, n = H.shape
+        row_sums = H.sum(axis=1).astype(int)
+
+        self._e = self._model.addVars(n, vtype=self._GRB.BINARY, name="e")
+        self._a = self._model.addVars(m, vtype=self._GRB.INTEGER, lb=0, name="a")
+        for i in range(m):
+            self._a[i].UB = int(row_sums[i] // 2)
+
+        obj = self._gp.quicksum(weights[j] * self._e[j] for j in range(n))
+        self._model.setObjective(obj, self._GRB.MINIMIZE)
+
+        self._constraints = []
+        for i in range(m):
+            cols = np.flatnonzero(H[i])
+            expr = self._gp.quicksum(self._e[j] for j in cols) - 2 * self._a[i]
+            constraint = self._model.addConstr(expr == 0.0, name=f"syndrome_{i}")
+            self._constraints.append(constraint)
+
+        self._model.update()
+
+    def solve(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float, str]:
+        if syndrome.shape[0] != self._num_rows:
+            raise ValueError(
+                f"Syndrome length {syndrome.shape[0]} does not match {self._num_rows}"
+            )
+        for i in range(self._num_rows):
+            self._constraints[i].RHS = float(syndrome[i])
+
+        self._model.optimize()
+        status = self._model.Status
+
+        if status not in (
+            self._GRB.OPTIMAL,
+            self._GRB.SUBOPTIMAL,
+            self._GRB.TIME_LIMIT,
+        ):
+            raise RuntimeError(f"Gurobi terminated with status {status}")
+        if self._model.SolCount == 0:
+            raise RuntimeError("Gurobi did not return a feasible solution.")
+
+        values = np.array([self._e[j].X for j in range(self._num_errors)], dtype=float)
+        correction = (values > 0.5).astype(np.uint8)
+        objective = float(self._model.ObjVal)
+        return correction, objective, str(status)

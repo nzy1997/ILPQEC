@@ -2,12 +2,13 @@
 Solver configuration for ILPDecoder.
 
 This module provides solver configuration for selecting and configuring backends.
-Pyomo handles the actual solver abstraction - we just configure which solver to use.
+The default backend is direct HiGHS; direct Gurobi is optional; Pyomo is used
+for other solvers.
 
 Supported Solvers:
-    - highs: HiGHS solver (default)
+    - highs: HiGHS solver (default, direct backend)
+    - gurobi: Gurobi solver (direct backend, requires license)
     - scip: SCIP solver (via scip or scipampl)
-    - gurobi: Gurobi solver (requires license)
     - cplex: IBM CPLEX (requires license)
     - cbc: COIN-OR CBC
     - glpk: GNU Linear Programming Kit
@@ -39,6 +40,7 @@ class SolverConfig:
         gap: Relative ILP gap tolerance
         threads: Number of threads (solver-dependent)
         verbose: Print solver output
+        direct: Use a direct backend when available (e.g., HiGHS, Gurobi)
         options: Additional solver-specific options
     """
     name: str = "highs"  # HiGHS is the default (easy to pip install)
@@ -46,6 +48,7 @@ class SolverConfig:
     gap: Optional[float] = None
     threads: Optional[int] = None
     verbose: bool = False
+    direct: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
     
     def to_pyomo_options(self) -> Dict[str, Any]:
@@ -106,6 +109,41 @@ SOLVER_EXECUTABLES = {
 DEFAULT_SOLVER_ORDER = ["highs", "scip", "cbc", "glpk", "gurobi", "cplex"]
 
 
+def is_pyomo_available() -> bool:
+    """Return True if Pyomo is available."""
+    try:
+        import pyomo  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _highs_available() -> bool:
+    try:
+        import highspy  # noqa: F401
+        return True
+    except Exception:
+        return shutil.which("highs") is not None
+
+
+def is_gurobi_available() -> bool:
+    """Return True if gurobipy is importable for the direct Gurobi backend."""
+    try:
+        import gurobipy  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def require_pyomo() -> None:
+    """Raise if Pyomo is not installed."""
+    if not is_pyomo_available():
+        raise ImportError(
+            "Pyomo is required for non-HiGHS solvers. "
+            "Install with: pip install ilpdecoder[pyomo]"
+        )
+
+
 def get_available_solvers() -> List[str]:
     """
     Get list of available solvers.
@@ -117,11 +155,19 @@ def get_available_solvers() -> List[str]:
     import warnings
     
     available = []
+    if _highs_available():
+        available.append("highs")
+    if is_gurobi_available():
+        available.append("gurobi")
+    if not is_pyomo_available():
+        return list(dict.fromkeys(available))
     
     # Suppress Pyomo warnings during solver detection
     logging.getLogger('pyomo').setLevel(logging.ERROR)
     
     for solver_name, executables in SOLVER_EXECUTABLES.items():
+        if solver_name == "highs":
+            continue
         # First check for executable in PATH
         for exe in executables:
             if shutil.which(exe) is not None:
@@ -144,7 +190,7 @@ def get_available_solvers() -> List[str]:
             except Exception:
                 pass
     
-    return list(set(available))
+    return list(dict.fromkeys(available))
 
 
 def get_default_solver() -> str:
@@ -159,21 +205,20 @@ def get_default_solver() -> str:
     Raises:
         RuntimeError: If no solver is available.
     """
+    if _highs_available():
+        return "highs"
     available = get_available_solvers()
-    
     for solver in DEFAULT_SOLVER_ORDER:
         if solver in available:
             return solver
-    
     if available:
         return available[0]
     
     raise RuntimeError(
         "No ILP solver available. Please install one of:\n"
         "  - HiGHS: pip install highspy\n"
-        "  - SCIP: https://www.scipopt.org/\n"
-        "  - CBC: apt install coinor-cbc\n"
-        "  - GLPK: apt install glpk-utils"
+        "  - Gurobi: pip install ilpdecoder[gurobi]\n"
+        "  - Pyomo solvers: pip install ilpdecoder[pyomo]"
     )
 
 

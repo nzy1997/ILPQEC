@@ -87,6 +87,7 @@ error[bar,baz](0.1) D1 L0
 
 def test_dem_applies_shift_detectors():
     """shift_detectors offsets are applied to subsequent errors."""
+    pytest.importorskip("stim")
     dem_str = """
 error(0.1) D0
 shift_detectors 2
@@ -108,6 +109,7 @@ error(0.2) D0 D1
 
 def test_dem_rejects_repeat_blocks_when_flatten_disabled():
     """repeat blocks should fail loudly when flattening is disabled."""
+    pytest.importorskip("stim")
     dem_str = """
 repeat 2 {
 error(0.1) D0
@@ -119,6 +121,7 @@ error(0.1) D0
 
 def test_dem_ignores_detector_metadata():
     """detector/logical_observable metadata lines are ignored."""
+    pytest.importorskip("stim")
     dem_str = """
 detector D0
 logical_observable L0
