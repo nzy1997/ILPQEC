@@ -1,5 +1,6 @@
 """Additional tests to raise coverage on edge cases and helper paths."""
 
+import builtins
 from types import SimpleNamespace
 
 import numpy as np
@@ -32,6 +33,23 @@ def test_parity_check_sparse_and_scalar_weights():
     decoder = Decoder.from_parity_check_matrix(H, weights=2.5, solver="highs")
     np.testing.assert_array_equal(decoder.get_parity_check_matrix(), H.toarray() % 2)
     np.testing.assert_array_equal(decoder.get_weights(), np.array([2.5, 2.5, 2.5]))
+
+
+def test_parity_check_sparse_without_scipy(monkeypatch):
+    class DummySparse:
+        def toarray(self):
+            return np.array([[1, 0], [0, 1]], dtype=np.uint8)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("scipy"):
+            raise ImportError("no scipy")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(ImportError, match="Sparse parity-check matrices require SciPy"):
+        Decoder.from_parity_check_matrix(DummySparse(), solver="highs")
 
 
 def test_from_stim_dem_file_reads(tmp_path):
@@ -73,6 +91,33 @@ def test_decode_batch_parity_with_weights():
     outputs, weights = decoder.decode_batch(np.array([[0, 0], [1, 1]]), return_weights=True)
     np.testing.assert_array_equal(outputs, np.array([[1, 0], [0, 1]], dtype=np.uint8))
     np.testing.assert_array_equal(weights, np.array([3.0, 4.0]))
+
+
+def test_decode_dem_return_weight(monkeypatch):
+    decoder = Decoder.from_stim_dem("error(0.1) D0 L0\n", solver="highs")
+    monkeypatch.setattr(
+        decoder,
+        "_solve_ilp",
+        lambda _: (np.array([1], dtype=np.uint8), 7.5),
+    )
+    correction, observables, weight = decoder.decode([1], return_weight=True)
+    np.testing.assert_array_equal(correction, np.array([1], dtype=np.uint8))
+    np.testing.assert_array_equal(observables, np.array([1], dtype=np.uint8))
+    assert weight == 7.5
+
+
+def test_decode_batch_dem_one_dimensional(monkeypatch):
+    decoder = Decoder.from_stim_dem("error(0.1) D0 L0\n", solver="highs")
+    monkeypatch.setattr(
+        decoder,
+        "decode",
+        lambda _, return_weight=False: (
+            np.array([0], dtype=np.uint8),
+            np.array([1], dtype=np.uint8),
+        ),
+    )
+    outputs = decoder.decode_batch(np.array([1], dtype=np.uint8))
+    np.testing.assert_array_equal(outputs, np.array([[1]], dtype=np.uint8))
 
 
 def test_set_solver_defaults(monkeypatch):
@@ -167,6 +212,39 @@ def test_parse_dem_merge_parallel_edges():
     p_combined = p1 * (1 - p2) + p2 * (1 - p1)
     expected_weight = np.log((1 - p_combined) / p_combined)
     np.testing.assert_allclose(decoder.get_weights(), np.array([expected_weight]))
+
+
+def test_parse_dem_import_requires_stim(monkeypatch):
+    decoder = Decoder()
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "stim":
+            raise ImportError("no stim")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(ImportError, match="stim is required"):
+        decoder._parse_dem("error(0.1) D0\n", merge_parallel=True, flatten_dem=False)
+
+
+def test_parse_dem_comment_and_shift_detectors():
+    decoder = Decoder()
+    fake = FakeDem("# comment\nshift_detectors 2\nerror(0.1) D0\n")
+    H, obs_matrix, _ = decoder._parse_dem(fake, merge_parallel=True, flatten_dem=False)
+    assert obs_matrix.shape[0] == 0
+    assert H.shape == (3, 1)
+    assert H[2, 0] == 1
+
+
+def test_parse_dem_duplicate_detector_cancels():
+    decoder = Decoder.from_stim_dem("error(0.1) D0 ^ D0 L0\n", solver="highs")
+    H = decoder.get_parity_check_matrix()
+    obs = decoder._observable_matrix
+    assert H.shape == (1, 1)
+    assert H[0, 0] == 0
+    assert obs.shape == (1, 1)
+    assert obs[0, 0] == 1
 
 
 def test_parse_dem_shift_detectors_invalid_instruction():
@@ -266,9 +344,35 @@ def test_get_available_solvers_fallback(monkeypatch):
     assert available == ["cbc"]
 
 
+def test_get_available_solvers_executable_found(monkeypatch):
+    monkeypatch.setattr(solver_module, "SOLVER_EXECUTABLES", {"cbc": ["cbc"]})
+    monkeypatch.setattr(
+        solver_module.shutil,
+        "which",
+        lambda exe: "/bin/true" if exe == "cbc" else None,
+    )
+    assert solver_module.get_available_solvers() == ["cbc"]
+
+
+def test_get_available_solvers_pyomo_import_failure(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("pyomo"):
+            raise ImportError("no pyomo")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(solver_module, "SOLVER_EXECUTABLES", {"cbc": ["cbc"]})
+    monkeypatch.setattr(solver_module.shutil, "which", lambda _: None)
+    assert solver_module.get_available_solvers() == []
+
+
 def test_get_default_solver_fallback(monkeypatch):
     monkeypatch.setattr(solver_module, "get_available_solvers", lambda: ["glpk"])
     assert solver_module.get_default_solver() == "glpk"
+    monkeypatch.setattr(solver_module, "get_available_solvers", lambda: ["custom"])
+    assert solver_module.get_default_solver() == "custom"
     monkeypatch.setattr(solver_module, "get_available_solvers", lambda: [])
     with pytest.raises(RuntimeError):
         solver_module.get_default_solver()
@@ -282,4 +386,35 @@ def test_get_pyomo_solver_name_fallback(monkeypatch):
             return False
 
     monkeypatch.setattr(pe, "SolverFactory", lambda _: FakeSolver())
+    assert solver_module.get_pyomo_solver_name("highs") == "highs"
+
+
+def test_get_pyomo_solver_name_handles_exceptions(monkeypatch):
+    import pyomo.environ as pe
+
+    class FakeSolver:
+        def __init__(self, available: bool):
+            self._available = available
+
+        def available(self) -> bool:
+            return self._available
+
+    def fake_factory(exe):
+        if exe == "highs":
+            raise RuntimeError("boom")
+        return FakeSolver(True)
+
+    monkeypatch.setattr(pe, "SolverFactory", fake_factory)
+    assert solver_module.get_pyomo_solver_name("highs") == "highspy"
+
+
+def test_get_pyomo_solver_name_import_failure(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("pyomo"):
+            raise ImportError("no pyomo")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
     assert solver_module.get_pyomo_solver_name("highs") == "highs"
