@@ -1,0 +1,23 @@
+site_name: ILPDecoder
+site_url: https://nzy1997.github.io/ILPDecoder/
+repo_url: https://github.com/nzy1997/ILPDecoder
+repo_name: nzy1997/ILPDecoder
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Mathematical Formulation: math.md

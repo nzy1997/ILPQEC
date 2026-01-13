@@ -5,6 +5,8 @@
 
 ILPDecoder is a Python package for maximum-likelihood quantum error correction decoding using integer linear programming (ILP). It turns parity-check matrices or Stim `DetectorErrorModel`s into an ILP and solves it with a **direct HiGHS** backend by default (no Pyomo required). An optional **direct Gurobi** backend is available for licensed users. It is aimed at correctness-focused baselines, solver comparisons, and small-to-medium code studies rather than high-throughput production decoding.
 
+Documentation: https://nzy1997.github.io/ILPDecoder/
+
 ## Scope and Highlights
 
 What it does well:

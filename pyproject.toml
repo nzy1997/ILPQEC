@@ -41,6 +41,10 @@ pyomo = [
 gurobi = [
     "gurobipy>=10.0; python_version < '3.13'",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+]
 scipy = [
     "scipy>=1.7",
 ]
@@ -59,7 +63,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/nzy1997/ILPDecoder"
-Documentation = "https://github.com/nzy1997/ILPDecoder#readme"
+Documentation = "https://nzy1997.github.io/ILPDecoder/"
 Repository = "https://github.com/nzy1997/ILPDecoder"
 
 [build-system]
