@@ -670,12 +670,11 @@ class Decoder:
         flatten_dem: bool
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Parse a Stim DEM into H matrix, observable matrix, and weights."""
-        try:
-            import stim
-        except ImportError:
-            raise ImportError("stim is required. Install with: pip install stim")
-        
         if isinstance(dem, str):
+            try:
+                import stim
+            except ImportError:
+                raise ImportError("stim is required. Install with: pip install stim")
             dem = stim.DetectorErrorModel(dem)
         if flatten_dem:
             dem = dem.flattened()
