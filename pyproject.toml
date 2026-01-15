@@ -51,6 +51,10 @@ scipy = [
 stim = [
     "stim>=1.12",
 ]
+sinter = [
+    "sinter>=1.12",
+    "stim>=1.12",
+]
 dev = [
     "pytest>=8.4.2",
     "pytest-cov>=4.0",
