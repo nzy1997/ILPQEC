@@ -1,8 +1,8 @@
 """
-Benchmark ILPDecoder vs MWPM (pymatching) and BPOSD (ldpc) on circuit-level decoding.
+Benchmark ILPDecoder vs MWPM (pymatching), BPOSD (ldpc), and Tesseract on circuit-level decoding.
 
 Requirements:
-    pip install stim pymatching ldpc
+    pip install stim pymatching ldpc tesseract-decoder
     Plus an ILP solver (HiGHS recommended: pip install highspy)
 """
 
@@ -99,6 +99,16 @@ def build_pymatching(dem):
     return pymatching.Matching.from_detector_error_model(dem)
 
 
+def build_tesseract(dem, det_beam=50):
+    """Construct a tesseract decoder from a Stim DEM."""
+    try:
+        from tesseract_decoder import tesseract
+    except Exception as exc:
+        raise ImportError("tesseract-decoder is required (pip install tesseract-decoder)") from exc
+    config = tesseract.TesseractConfig(dem=dem, det_beam=det_beam)
+    return config.compile_decoder()
+
+
 def predict_observables(pred, obs_matrix):
     """Convert a decoder output into observable predictions."""
     pred = np.asarray(pred, dtype=np.uint8)
@@ -159,6 +169,17 @@ def main():
         type=str,
         default="auto",
         help="Comma-separated ILP solvers to compare (auto=available).",
+    )
+    parser.add_argument(
+        "--skip-tesseract",
+        action="store_true",
+        help="Skip tesseract decoder benchmark.",
+    )
+    parser.add_argument(
+        "--tesseract-beam",
+        type=int,
+        default=50,
+        help="Tesseract decoder det_beam parameter (default: 50).",
     )
     args = parser.parse_args()
 
@@ -279,6 +300,18 @@ def main():
         benchmark("BPOSD", detections, observables, bposd_decode)
     except Exception as exc:
         print(f"BPOSD        skipped ({exc})")
+
+    if not args.skip_tesseract:
+        try:
+            tesseract_decoder = build_tesseract(dem, det_beam=args.tesseract_beam)
+
+            def tesseract_decode(det):
+                pred = tesseract_decoder.decode(det)
+                return np.asarray(pred, dtype=np.uint8)
+
+            benchmark("Tesseract", detections, observables, tesseract_decode)
+        except Exception as exc:
+            print(f"Tesseract    skipped ({exc})")
 
 
 if __name__ == "__main__":

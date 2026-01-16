@@ -252,11 +252,12 @@ Note: `error_probabilities` must be in (0, 0.5]; pass explicit `weights` for p >
 Install optional deps for the benchmarks:
 
 ```bash
-uv pip install stim pymatching ldpc
+uv pip install stim pymatching ldpc tesseract-decoder
 ```
 
 Notes:
 - BPOSD runs with `max_iter=50`, `osd_order=0`, and `bp_method=minimum_sum`.
+- Tesseract runs with `det_beam=50` by default (adjustable via `--tesseract-beam`).
 
 ### Circuit-level rotated surface code memory
 
@@ -270,13 +271,14 @@ Results from a local macOS arm64 run (shots=10000, your numbers will vary):
 
 | Decoder | Time (ms/shot) | Logical Error Rate |
 |--------|---------------|--------------------|
-| ILP[highs] (direct) | 2.7469 | 1.610% |
-| ILP[gurobi] (direct) | 0.5923 | 1.620% |
-| ILP[scip] | 27.1241 | 1.620% |
-| ILP[cbc] | 13.7808 | 1.620% |
-| ILP[glpk] | 7.8176 | 1.610% |
-| MWPM (pymatching) | 0.0034 | 2.090% |
-| BPOSD (ldpc) | 0.0308 | 7.740% |
+| ILP[highs] (direct) | 2.7514 | 1.640% |
+| ILP[gurobi] (direct) | 0.6403 | 1.650% |
+| ILP[scip] | 28.2160 | 1.670% |
+| ILP[cbc] | 14.9315 | 1.670% |
+| ILP[glpk] | 8.6292 | 1.670% |
+| MWPM (pymatching) | 0.0035 | 2.150% |
+| BPOSD (ldpc) | 0.0308 | 7.680% |
+| Tesseract | 0.1602 | 1.640% |
 
 ### Code-capacity surface code (data errors only, perfect syndrome)
 
@@ -290,13 +292,14 @@ Results from a local macOS arm64 run (shots=10000, your numbers will vary):
 
 | Decoder | Time (ms/shot) | Logical Error Rate |
 |--------|---------------|--------------------|
-| ILP[highs] (direct) | 3.1914 | 0.120% |
-| ILP[gurobi] (direct) | 0.0826 | 0.120% |
-| ILP[scip] | 22.6194 | 0.120% |
-| ILP[cbc] | 9.8211 | 0.120% |
-| ILP[glpk] | 4.7919 | 0.120% |
-| MWPM (pymatching) | 0.0033 | 0.120% |
-| BPOSD (ldpc) | 0.0029 | 0.120% |
+| ILP[highs] (direct) | 3.2321 | 0.070% |
+| ILP[gurobi] (direct) | 0.0838 | 0.070% |
+| ILP[scip] | 23.4834 | 0.070% |
+| ILP[cbc] | 10.4697 | 0.070% |
+| ILP[glpk] | 5.0085 | 0.070% |
+| MWPM (pymatching) | 0.0036 | 0.070% |
+| BPOSD (ldpc) | 0.0028 | 0.070% |
+| Tesseract | 0.0093 | 0.070% |
 
 ### Color code (`color_code:memory_xyz`)
 
@@ -310,13 +313,14 @@ Results from a local macOS arm64 run (shots=10000, your numbers will vary):
 
 | Decoder | Time (ms/shot) | Logical Error Rate |
 |--------|---------------|--------------------|
-| ILP[highs] (direct) | 2.0008 | 4.510% |
-| ILP[gurobi] (direct) | 0.3164 | 4.500% |
-| ILP[scip] | 24.0461 | 4.500% |
-| ILP[cbc] | 11.0780 | 4.510% |
-| ILP[glpk] | 5.8961 | 4.500% |
-| MWPM (pymatching) | 0.0041 | 13.610% |
-| BPOSD (ldpc) | 0.0124 | 9.970% |
+| ILP[highs] (direct) | 2.0226 | 4.450% |
+| ILP[gurobi] (direct) | 0.3184 | 4.420% |
+| ILP[scip] | 24.9402 | 4.420% |
+| ILP[cbc] | 11.6961 | 4.450% |
+| ILP[glpk] | 6.0799 | 4.420% |
+| MWPM (pymatching) | 0.0034 | 13.420% |
+| BPOSD (ldpc) | 0.0114 | 9.830% |
+| Tesseract | 0.0600 | 4.450% |
 
 ## API Reference
 
