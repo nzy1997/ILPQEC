@@ -18,10 +18,10 @@ class RowReduction:
 
 
 def _as_gf2_matrix(matrix: np.ndarray) -> np.ndarray:
-    array = np.asarray(matrix, dtype=np.uint8) % 2
+    array = np.asarray(matrix, dtype=np.int64) % 2
     if array.ndim != 2:
         raise ValueError("GF(2) matrix must be two-dimensional")
-    return array.copy()
+    return array.astype(np.uint8, copy=True)
 
 
 def row_reduce(matrix: np.ndarray) -> RowReduction:
@@ -107,6 +107,9 @@ def extend_independent_rows(
 ) -> np.ndarray:
     """Select candidate rows that extend the rowspace of base by count dimensions."""
     current = row_basis(base)
+    if count == 0:
+        return np.zeros((0, current.shape[1]), dtype=np.uint8)
+
     selected = []
     current_rank = rank(current)
 
