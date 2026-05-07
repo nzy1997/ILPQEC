@@ -21,17 +21,21 @@ class MinWeightResult:
 
 
 def _as_binary_matrix(matrix: np.ndarray, name: str) -> np.ndarray:
-    array = np.asarray(matrix, dtype=np.uint8) % 2
+    array = np.asarray(matrix)
     if array.ndim != 2:
         raise ValueError(f"{name} must be two-dimensional")
-    return array
+    if np.any((array != 0) & (array != 1)):
+        raise ValueError(f"{name} must contain only binary values")
+    return np.asarray(array, dtype=np.uint8)
 
 
 def _as_binary_vector(vector: np.ndarray, name: str) -> np.ndarray:
-    array = np.asarray(vector, dtype=np.uint8) % 2
+    array = np.asarray(vector)
     if array.ndim != 1:
         raise ValueError(f"{name} must be one-dimensional")
-    return array
+    if np.any((array != 0) & (array != 1)):
+        raise ValueError(f"{name} must contain only binary values")
+    return np.asarray(array, dtype=np.uint8)
 
 
 def _exact_solver_config(solver: Optional[str], options: dict[str, Any]) -> SolverConfig:

@@ -78,3 +78,19 @@ def test_exact_ilp_rejects_positive_gap():
 
     with pytest.raises(ValueError, match="exact"):
         minimize_weight_with_fixed_syndrome(matrix, syndrome, solver="highs", gap=0.1)
+
+
+def test_nonzero_logical_operator_rejects_positive_gap():
+    checks = np.array([[1, 1, 0, 0]], dtype=np.uint8)
+    duals = np.array([[0, 0, 1, 0]], dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="exact"):
+        minimize_nonzero_logical_operator(checks, duals, solver="highs", gap=0.1)
+
+
+def test_exact_ilp_rejects_non_binary_matrix_input():
+    matrix = np.array([[1, 2]], dtype=np.int64)
+    syndrome = np.array([0], dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="binary"):
+        minimize_weight_with_fixed_syndrome(matrix, syndrome, solver="highs")
