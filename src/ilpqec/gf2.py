@@ -17,6 +17,14 @@ class RowReduction:
     rank: int
 
 
+@dataclass(frozen=True)
+class CSSLogicalBasisData:
+    """Paired binary CSS logical bases."""
+
+    x: np.ndarray
+    z: np.ndarray
+
+
 def _as_gf2_matrix(matrix: np.ndarray) -> np.ndarray:
     array = np.asarray(matrix, dtype=np.int64) % 2
     if array.ndim != 2:
@@ -135,3 +143,40 @@ def extend_independent_rows(
     if len(selected) != count:
         raise ValueError("Could not find enough independent quotient representatives")
     return np.asarray(selected, dtype=np.uint8)
+
+
+def quotient_basis(super_space: np.ndarray, sub_space: np.ndarray, dimension: int) -> np.ndarray:
+    """Return representatives for super_space / sub_space."""
+    return extend_independent_rows(sub_space, super_space, dimension)
+
+
+def css_logical_basis(hx: np.ndarray, hz: np.ndarray) -> CSSLogicalBasisData:
+    """Compute paired X and Z logical bases for a binary CSS code."""
+    hx = _as_gf2_matrix(hx)
+    hz = _as_gf2_matrix(hz)
+    if hx.shape[1] != hz.shape[1]:
+        raise ValueError("Hx and Hz must have the same number of columns")
+
+    n = hx.shape[1]
+    k = n - rank(hx) - rank(hz)
+    if k < 0:
+        raise ValueError("Computed a negative number of logical qubits")
+    if k == 0:
+        return CSSLogicalBasisData(
+            x=np.zeros((0, n), dtype=np.uint8),
+            z=np.zeros((0, n), dtype=np.uint8),
+        )
+
+    x_candidates = nullspace(hz)
+    z_candidates = nullspace(hx)
+    lx = quotient_basis(x_candidates, row_basis(hx), k)
+    lz = quotient_basis(z_candidates, row_basis(hz), k)
+
+    pairing = (lx @ lz.T) % 2
+    inverse_pairing = binary_inverse(pairing)
+    paired_lz = (inverse_pairing.T @ lz) % 2
+
+    if not np.array_equal((lx @ paired_lz.T) % 2, np.eye(k, dtype=np.uint8)):
+        raise ValueError("Failed to construct paired CSS logical bases")
+
+    return CSSLogicalBasisData(x=lx.astype(np.uint8), z=paired_lz.astype(np.uint8))

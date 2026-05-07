@@ -5,6 +5,7 @@ import pytest
 
 from ilpqec.gf2 import (
     binary_inverse,
+    css_logical_basis,
     extend_independent_rows,
     nullspace,
     rank,
@@ -215,3 +216,39 @@ def test_extend_independent_rows_zero_count_returns_empty_matrix(candidates):
 
     assert selected.shape == (0, 3)
     assert selected.dtype == np.uint8
+
+
+def steane_check_matrix():
+    return np.array(
+        [
+            [1, 0, 1, 0, 1, 0, 1],
+            [0, 1, 1, 0, 0, 1, 1],
+            [0, 0, 0, 1, 1, 1, 1],
+        ],
+        dtype=np.uint8,
+    )
+
+
+def test_css_logical_basis_for_steane_code_is_paired():
+    h = steane_check_matrix()
+
+    basis = css_logical_basis(h, h)
+
+    assert basis.x.shape == (1, 7)
+    assert basis.z.shape == (1, 7)
+    np.testing.assert_array_equal((h @ basis.x.T) % 2, np.zeros((3, 1), dtype=np.uint8))
+    np.testing.assert_array_equal((h @ basis.z.T) % 2, np.zeros((3, 1), dtype=np.uint8))
+    np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(1, dtype=np.uint8))
+
+
+def test_css_logical_basis_for_two_logical_code_is_paired():
+    hx = np.array([[1, 1, 0, 0]], dtype=np.uint8)
+    hz = np.array([[0, 0, 1, 1]], dtype=np.uint8)
+
+    basis = css_logical_basis(hx, hz)
+
+    assert basis.x.shape == (2, 4)
+    assert basis.z.shape == (2, 4)
+    np.testing.assert_array_equal((hz @ basis.x.T) % 2, np.zeros((1, 2), dtype=np.uint8))
+    np.testing.assert_array_equal((hx @ basis.z.T) % 2, np.zeros((1, 2), dtype=np.uint8))
+    np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(2, dtype=np.uint8))
