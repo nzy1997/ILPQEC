@@ -43,6 +43,16 @@ def test_css_code_copies_matrices_for_read_only_properties():
     np.testing.assert_array_equal(code.hx, np.array([[1, 1, 0]], dtype=np.uint8))
 
 
+def test_css_code_copies_input_matrices_on_construction():
+    hx = np.array([[1, 1, 0]], dtype=np.uint8)
+    hz = np.zeros((0, 3), dtype=np.uint8)
+
+    code = CSSCode(hx, hz)
+    hx[0, 0] = 0
+
+    np.testing.assert_array_equal(code.hx, np.array([[1, 1, 0]], dtype=np.uint8))
+
+
 def test_css_code_rejects_non_binary_input():
     hx = np.array([[2, 0, 1]], dtype=int)
     hz = np.zeros((0, 3), dtype=np.uint8)
@@ -83,3 +93,11 @@ def test_logical_basis_raises_for_zero_logical_qubits():
 
     with pytest.raises(ValueError, match="no logical qubits"):
         code.logical_basis()
+
+
+def test_logical_basis_rejects_solver_arguments_before_ilp_is_implemented():
+    h = steane_check_matrix()
+    code = CSSCode.from_parity_check_matrices(h, h)
+
+    with pytest.raises(TypeError, match="solver options are not supported"):
+        code.logical_basis(reduce=False, solver="highs")

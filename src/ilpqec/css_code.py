@@ -56,10 +56,15 @@ class CSSCode:
     """Binary CSS code built from X- and Z-type parity-check matrices."""
 
     def __init__(self, hx: np.ndarray, hz: np.ndarray):
+        hx = _to_binary_matrix(hx, "hx")
+        hz = _to_binary_matrix(hz, "hz")
+        if hx.shape[1] != hz.shape[1]:
+            raise ValueError("hx and hz must have the same number of columns")
+
         self._hx = hx
         self._hz = hz
-        self._rank_x = rank(hx)
-        self._rank_z = rank(hz)
+        self._rank_x = rank(self._hx)
+        self._rank_z = rank(self._hz)
         self._k = self.n - self._rank_x - self._rank_z
         if self._k < 0:
             raise ValueError("Computed a negative number of logical qubits")
@@ -130,10 +135,11 @@ class CSSCode:
         **solver_options,
     ) -> CSSLogicalBasis:
         """Return paired logical bases, optionally reduced with exact ILP."""
-        del solver, solver_options
         self._require_logicals()
         if reduce:
             raise NotImplementedError("Reduced logical basis is implemented in the ILP task")
+        if solver is not None or solver_options:
+            raise TypeError("solver options are not supported until reduced logical bases are implemented")
         basis = self._canonical_logical_basis()
         return CSSLogicalBasis(x=basis.x.copy(), z=basis.z.copy())
 
@@ -144,6 +150,5 @@ class CSSCode:
         **solver_options,
     ) -> CSSDistanceResult:
         """Return exact CSS code distance and shortest X/Z logicals."""
-        del solver, solver_options
         self._require_logicals()
         raise NotImplementedError("Distance is implemented in the ILP task")
