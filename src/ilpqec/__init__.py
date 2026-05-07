@@ -27,8 +27,17 @@ Supported Solvers:
     - glpk: GNU Linear Programming Kit (Pyomo required)
 """
 
+from ilpqec.css_code import CSSCode, CSSDistanceResult, CSSLogicalBasis
 from ilpqec.decoder import Decoder
 from ilpqec.solver import get_available_solvers, get_default_solver, SolverConfig
 
 __version__ = "0.1.0"
-__all__ = ["Decoder", "get_available_solvers", "get_default_solver", "SolverConfig"]
+__all__ = [
+    "CSSCode",
+    "CSSDistanceResult",
+    "CSSLogicalBasis",
+    "Decoder",
+    "get_available_solvers",
+    "get_default_solver",
+    "SolverConfig",
+]
