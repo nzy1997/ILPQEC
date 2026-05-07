@@ -177,6 +177,30 @@ def test_extend_independent_rows_raises_when_not_enough_independent_rows():
         extend_independent_rows(base, candidates, count=1)
 
 
+def test_extend_independent_rows_normalizes_candidate_rows_before_selection():
+    base = np.array(
+        [
+            [1, 0],
+        ],
+        dtype=np.uint8,
+    )
+    candidates = [
+        np.array([2, 3], dtype=object),
+    ]
+
+    selected = extend_independent_rows(base, candidates, count=1)
+
+    expected = np.array([[0, 1]], dtype=np.uint8)
+    np.testing.assert_array_equal(selected, expected)
+
+
+def test_extend_independent_rows_rejects_negative_count():
+    base = np.array([[1, 0]], dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="count"):
+        extend_independent_rows(base, [], count=-1)
+
+
 @pytest.mark.parametrize("candidates", [[np.array([1, 0, 1], dtype=np.uint8)], []])
 def test_extend_independent_rows_zero_count_returns_empty_matrix(candidates):
     base = np.array(

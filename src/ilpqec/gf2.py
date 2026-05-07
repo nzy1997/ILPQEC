@@ -106,6 +106,9 @@ def extend_independent_rows(
     count: int,
 ) -> np.ndarray:
     """Select candidate rows that extend the rowspace of base by count dimensions."""
+    if count < 0:
+        raise ValueError("count must be non-negative")
+
     current = row_basis(base)
     if count == 0:
         return np.zeros((0, current.shape[1]), dtype=np.uint8)
@@ -114,7 +117,12 @@ def extend_independent_rows(
     current_rank = rank(current)
 
     for candidate in candidates:
-        candidate = np.asarray(candidate, dtype=np.uint8).reshape(1, -1) % 2
+        candidate = np.asarray(candidate, dtype=np.int64) % 2
+        if candidate.ndim == 2 and candidate.shape[0] == 1:
+            candidate = candidate[0]
+        if candidate.ndim != 1:
+            raise ValueError("Candidate rows must be one-dimensional")
+        candidate = candidate.astype(np.uint8, copy=False).reshape(1, -1)
         trial = np.vstack([current, candidate])
         trial_rank = rank(trial)
         if trial_rank > current_rank:
