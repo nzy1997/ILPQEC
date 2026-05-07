@@ -146,7 +146,12 @@ def extend_independent_rows(
 
 
 def quotient_basis(super_space: np.ndarray, sub_space: np.ndarray, dimension: int) -> np.ndarray:
-    """Return representatives for super_space / sub_space."""
+    """Return independent representatives for super_space / sub_space.
+
+    Rows of ``super_space`` are treated as candidate representatives. For CSS
+    logical-basis use, ``sub_space`` is assumed to lie within that rowspace, and
+    ``dimension`` independent rows are selected modulo ``sub_space``.
+    """
     return extend_independent_rows(sub_space, super_space, dimension)
 
 
@@ -156,6 +161,8 @@ def css_logical_basis(hx: np.ndarray, hz: np.ndarray) -> CSSLogicalBasisData:
     hz = _as_gf2_matrix(hz)
     if hx.shape[1] != hz.shape[1]:
         raise ValueError("Hx and Hz must have the same number of columns")
+    if np.any((hx @ hz.T) % 2):
+        raise ValueError("CSS check matrices must commute")
 
     n = hx.shape[1]
     k = n - rank(hx) - rank(hz)

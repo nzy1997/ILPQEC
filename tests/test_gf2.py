@@ -8,6 +8,7 @@ from ilpqec.gf2 import (
     css_logical_basis,
     extend_independent_rows,
     nullspace,
+    quotient_basis,
     rank,
     row_basis,
     row_reduce,
@@ -252,3 +253,40 @@ def test_css_logical_basis_for_two_logical_code_is_paired():
     np.testing.assert_array_equal((hz @ basis.x.T) % 2, np.zeros((1, 2), dtype=np.uint8))
     np.testing.assert_array_equal((hx @ basis.z.T) % 2, np.zeros((1, 2), dtype=np.uint8))
     np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(2, dtype=np.uint8))
+
+
+def test_css_logical_basis_rejects_non_commuting_checks():
+    hx = np.array([[1, 0, 0]], dtype=np.uint8)
+    hz = np.array([[1, 0, 0]], dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="commute"):
+        css_logical_basis(hx, hz)
+
+
+def test_css_logical_basis_repairs_non_identity_initial_pairing():
+    hx = np.array([[1, 1, 1]], dtype=np.uint8)
+    hz = np.zeros((0, 3), dtype=np.uint8)
+
+    basis = css_logical_basis(hx, hz)
+
+    assert basis.x.shape == (2, 3)
+    assert basis.z.shape == (2, 3)
+    np.testing.assert_array_equal((hx @ basis.z.T) % 2, np.zeros((1, 2), dtype=np.uint8))
+    np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(2, dtype=np.uint8))
+
+    raw_z = quotient_basis(nullspace(hx), row_basis(hz), dimension=2)
+    np.testing.assert_array_equal(
+        (basis.x @ raw_z.T) % 2,
+        np.array([[1, 1], [1, 0]], dtype=np.uint8),
+    )
+    assert not np.array_equal(basis.z, raw_z)
+
+
+def test_css_logical_basis_returns_empty_bases_for_zero_logical_qubits():
+    hx = np.eye(2, dtype=np.uint8)
+    hz = np.zeros((0, 2), dtype=np.uint8)
+
+    basis = css_logical_basis(hx, hz)
+
+    assert basis.x.shape == (0, 2)
+    assert basis.z.shape == (0, 2)
