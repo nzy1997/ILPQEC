@@ -18,13 +18,13 @@ Example Usage:
     # From parity-check matrix (uses HiGHS by default)
     decoder = Decoder.from_parity_check_matrix(H)
     correction = decoder.decode(syndrome)
-    
+
     # Use different solver (requires Pyomo extra)
     decoder = Decoder.from_parity_check_matrix(H, solver="scip", direct=False)
-    
+
     # Change solver at runtime
     decoder.set_solver("gurobi", time_limit=60)
-    
+
     # From Stim DEM
     decoder = Decoder.from_stim_dem(dem)
     correction, observables = decoder.decode(detector_outcomes)
@@ -32,38 +32,39 @@ Example Usage:
 
 from __future__ import annotations
 
-from typing import Union, List, Optional, Tuple, Dict, Any, TYPE_CHECKING
-from pathlib import Path
 import math
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
 
 from ilpqec.solver import (
     SolverConfig,
+    get_available_solvers,
     get_default_solver,
     get_pyomo_solver_name,
-    get_available_solvers,
-    require_pyomo,
-    is_pyomo_available,
     is_gurobi_available,
+    is_pyomo_available,
+    require_pyomo,
 )
 
 if TYPE_CHECKING:
+    import stim
     from scipy.sparse import spmatrix
 
 
 class Decoder:
     """
     ILP-based quantum error correction decoder.
-    
+
     This class provides a PyMatching-like API for decoding using
     Integer Linear Programming. It uses a direct HiGHS backend by
     default, with an optional direct Gurobi backend and a Pyomo backend
     for other solvers.
-    
+
     Solver switching is trivial - just call set_solver() with a different
     solver name. No need to rebuild the model.
-    
+
     Supported Solvers:
         - highs: HiGHS solver (default, direct backend)
         - gurobi: Gurobi solver (direct backend, requires license)
@@ -71,17 +72,17 @@ class Decoder:
         - cplex: IBM CPLEX (requires license, Pyomo required)
         - cbc: COIN-OR CBC (Pyomo required)
         - glpk: GNU Linear Programming Kit (Pyomo required)
-    
+
     Attributes:
         num_detectors: Number of parity checks / detectors
         num_errors: Number of error mechanisms
         num_observables: Number of logical observables (for DEM)
     """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         """
         Initialize an empty decoder.
-        
+
         Use the class methods `from_parity_check_matrix` or `from_stim_dem`
         to create a configured decoder.
         """
@@ -89,35 +90,35 @@ class Decoder:
         self._H: Optional[np.ndarray] = None  # Parity check matrix
         self._weights: Optional[np.ndarray] = None  # Error weights
         self._observable_matrix: Optional[np.ndarray] = None  # For DEM
-        
+
         # Solver configuration
-        self._solver_config = SolverConfig()
-        self._direct_highs_solver = None
-        self._direct_gurobi_solver = None
-        self._pyomo_model = None
-        self._pyomo_solver = None
-        self._pyomo_solver_name = None
+        self._solver_config: SolverConfig = SolverConfig()
+        self._direct_highs_solver: Any = None
+        self._direct_gurobi_solver: Any = None
+        self._pyomo_model: Any = None
+        self._pyomo_solver: Any = None
+        self._pyomo_solver_name: Optional[str] = None
 
         # Last solution info
         self._last_objective: Optional[float] = None
         self._last_status: Optional[str] = None
-    
+
     # =========================================================================
     # Construction Methods
     # =========================================================================
-    
+
     @classmethod
     def from_parity_check_matrix(
         cls,
         parity_check_matrix: Union[np.ndarray, spmatrix, List[List[int]]],
-        weights: Union[float, np.ndarray, List[float]] = None,
-        error_probabilities: Union[float, np.ndarray, List[float]] = None,
-        solver: str = None,
+        weights: Optional[Union[float, np.ndarray, List[float]]] = None,
+        error_probabilities: Optional[Union[float, np.ndarray, List[float]]] = None,
+        solver: Optional[str] = None,
         **solver_options
     ) -> 'Decoder':
         """
         Create a decoder from a binary parity-check matrix.
-        
+
         Args:
             parity_check_matrix: Binary m×n matrix H where m is the number
                 of parity checks and n is the number of error mechanisms.
@@ -129,22 +130,22 @@ class Decoder:
             solver: Solver name ("highs", "scip", "gurobi", etc.)
                 Default is "highs" with the direct HiGHS backend.
             **solver_options: Solver options (time_limit, gap, verbose, direct, etc.)
-            
+
         Returns:
             Configured Decoder instance
-            
+
         Example:
             >>> H = np.array([[1, 1, 0, 0], [0, 1, 1, 0], [0, 0, 1, 1]])
             >>> decoder = Decoder.from_parity_check_matrix(H)
             >>> correction = decoder.decode([1, 0, 1])
-            
+
             >>> # With different solver
             >>> decoder = Decoder.from_parity_check_matrix(H, solver="highs")
             >>> # Use Pyomo-backed solvers
             >>> decoder = Decoder.from_parity_check_matrix(H, solver="scip", direct=False)
         """
         decoder = cls()
-        
+
         # Convert to numpy array
         try:
             from scipy.sparse import spmatrix  # type: ignore
@@ -159,10 +160,10 @@ class Decoder:
                     "Install with: pip install scipy"
                 )
             H = np.asarray(parity_check_matrix)
-        
+
         decoder._H = H % 2  # Ensure binary
         n = H.shape[1]  # Number of errors
-        
+
         # Process weights
         if weights is None:
             if error_probabilities is not None:
@@ -175,26 +176,26 @@ class Decoder:
             weights = np.asarray(weights, dtype=float)
             if weights.shape != (n,):
                 raise ValueError(f"weights must have length {n} (got {weights.shape})")
-        
+
         decoder._weights = weights
-        
+
         # Set solver
         decoder.set_solver(solver, **solver_options)
-        
+
         return decoder
-    
+
     @classmethod
     def from_stim_dem(
         cls,
         dem: Union['stim.DetectorErrorModel', str],
-        solver: str = None,
+        solver: Optional[str] = None,
         merge_parallel_edges: bool = True,
         flatten_dem: bool = True,
         **solver_options
     ) -> 'Decoder':
         """
         Create a decoder from a Stim DetectorErrorModel.
-        
+
         Args:
             dem: A stim.DetectorErrorModel or its string representation
             solver: Solver name ("highs", "scip", etc.). Default is "highs".
@@ -202,7 +203,7 @@ class Decoder:
             flatten_dem: If True, call dem.flattened() to inline repeats and
                 apply detector shifts (may increase DEM size).
             **solver_options: Solver options (time_limit, gap, verbose, direct, etc.)
-        
+
         Note:
             This parser reads only error(p) lines (tags are ignored). It ignores
             detector/logical_observable metadata and applies shift_detectors
@@ -210,10 +211,10 @@ class Decoder:
             detector_separator. The '^' separator is treated as whitespace.
             Repeat blocks are handled by flatten_dem=True (default), but can
             cause large DEM expansions. Set flatten_dem=False to fail fast.
-            
+
         Returns:
             Configured Decoder instance
-            
+
         Example:
             >>> import stim
             >>> circuit = stim.Circuit.generated("surface_code:rotated_memory_x",
@@ -226,37 +227,37 @@ class Decoder:
             >>> correction, observables = decoder.decode(detector_outcomes)
         """
         decoder = cls()
-        
+
         # Parse DEM
         H, obs_matrix, weights = decoder._parse_dem(dem, merge_parallel_edges, flatten_dem)
-        
+
         decoder._H = H
         decoder._weights = weights
         decoder._observable_matrix = obs_matrix
-        
+
         # Set solver
         decoder.set_solver(solver, **solver_options)
-        
+
         return decoder
-    
+
     @classmethod
     def from_stim_dem_file(
         cls,
         dem_path: Union[str, Path],
-        solver: str = None,
+        solver: Optional[str] = None,
         flatten_dem: bool = True,
         **solver_options
     ) -> 'Decoder':
         """
         Create a decoder from a Stim DEM file.
-        
+
         Args:
             dem_path: Path to the .dem file
             solver: Solver name
             flatten_dem: If True, call dem.flattened() to inline repeats and
                 apply detector shifts (may increase DEM size).
             **solver_options: Solver options
-            
+
         Returns:
             Configured Decoder instance
         """
@@ -265,26 +266,26 @@ class Decoder:
         return cls.from_stim_dem(
             dem_str, solver=solver, flatten_dem=flatten_dem, **solver_options
         )
-    
+
     # =========================================================================
     # Solver Configuration
     # =========================================================================
-    
+
     def set_solver(
         self,
-        solver: str = None,
-        time_limit: float = None,
-        gap: float = None,
-        threads: int = None,
+        solver: Optional[str] = None,
+        time_limit: Optional[float] = None,
+        gap: Optional[float] = None,
+        threads: Optional[int] = None,
         verbose: bool = False,
         direct: Optional[bool] = None,
         **options
-    ):
+    ) -> None:
         """
         Set or change the solver.
-        
+
         You can switch solvers at any time without rebuilding the model.
-        
+
         Args:
             solver: Solver name. Options:
                 - "highs": HiGHS solver (default, direct backend)
@@ -301,7 +302,7 @@ class Decoder:
                 Defaults to True for HiGHS. For Gurobi, defaults to True
                 when gurobipy is installed.
             **options: Additional solver-specific options
-            
+
         Example:
             >>> decoder.set_solver("scip", time_limit=30)
             >>> decoder.set_solver("highs", threads=4)
@@ -359,7 +360,7 @@ class Decoder:
         self._direct_gurobi_solver = None
         self._pyomo_solver = None
         self._pyomo_solver_name = None
-    
+
     def get_solver_options(self) -> Dict[str, Any]:
         """Get current solver configuration as a dictionary."""
         return {
@@ -371,37 +372,42 @@ class Decoder:
             "direct": self._solver_config.direct,
             **self._solver_config.options
         }
-    
+
     # =========================================================================
     # Decoding Methods
     # =========================================================================
-    
+
     def decode(
         self,
         syndrome: Union[np.ndarray, List[int]],
-        return_weight: bool = False
-    ) -> Union[np.ndarray, Tuple[np.ndarray, float], Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, float]]:
+        return_weight: bool = False,
+    ) -> Union[
+        np.ndarray,
+        Tuple[np.ndarray, float],
+        Tuple[np.ndarray, np.ndarray],
+        Tuple[np.ndarray, np.ndarray, float],
+    ]:
         """
         Decode a syndrome using ILP.
-        
+
         The behavior depends on how the decoder was constructed:
         - From parity-check matrix: Returns correction vector
         - From Stim DEM: Returns (correction, observable_predictions)
-        
+
         Args:
             syndrome: Binary syndrome vector or detector outcomes
             return_weight: If True, also return the solution weight
-            
+
         Returns:
             For parity-check matrix:
                 correction: Binary vector of errors
                 weight (if return_weight): Total weight of solution
-                
+
             For Stim DEM:
-                correction: Binary vector of errors  
+                correction: Binary vector of errors
                 observables: Binary vector of observable predictions
                 weight (if return_weight): Total weight of solution
-                
+
         Example:
             >>> correction = decoder.decode([1, 0, 1])
             >>> correction, weight = decoder.decode([1, 0, 1], return_weight=True)
@@ -410,10 +416,13 @@ class Decoder:
             RuntimeError: If the solver fails to find a feasible solution.
         """
         if self._H is None:
-            raise RuntimeError("Decoder not configured. Use from_parity_check_matrix() or from_stim_dem().")
-        
+            raise RuntimeError(
+                "Decoder not configured. Use from_parity_check_matrix() or "
+                "from_stim_dem()."
+            )
+
         syndrome = np.asarray(syndrome, dtype=np.uint8) % 2
-        
+
         # Solve ILP (direct backend or Pyomo backend)
         if self._solver_config.direct:
             if self._solver_config.name == "highs":
@@ -424,12 +433,12 @@ class Decoder:
                 raise ValueError("Direct backend currently supports HiGHS and Gurobi only.")
         else:
             correction, objective = self._solve_ilp(syndrome)
-        
+
         # For DEM, compute observable predictions
         if self._observable_matrix is not None:
             observables = (self._observable_matrix @ correction) % 2
             observables = observables.astype(np.uint8)
-            
+
             if return_weight:
                 return correction, observables, objective
             return correction, observables
@@ -437,7 +446,7 @@ class Decoder:
             if return_weight:
                 return correction, objective
             return correction
-    
+
     def decode_batch(
         self,
         syndromes: np.ndarray,
@@ -445,11 +454,11 @@ class Decoder:
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Decode multiple syndromes.
-        
+
         Args:
             syndromes: 2D array of shape (num_shots, num_detectors)
             return_weights: If True, also return weights
-            
+
         Returns:
             For parity-check: corrections array
             For DEM: observable predictions array
@@ -458,57 +467,75 @@ class Decoder:
         syndromes = np.asarray(syndromes)
         if syndromes.ndim == 1:
             syndromes = syndromes.reshape(1, -1)
-        
+        if self._H is None:
+            raise RuntimeError(
+                "Decoder not configured. Use from_parity_check_matrix() or "
+                "from_stim_dem()."
+            )
+
         num_shots = syndromes.shape[0]
-        
+
         # Determine output shape
         if self._observable_matrix is not None:
             num_outputs = self._observable_matrix.shape[0]
         else:
             num_outputs = self._H.shape[1]
-        
+
         results = np.zeros((num_shots, num_outputs), dtype=np.uint8)
         weights = np.zeros(num_shots, dtype=float) if return_weights else None
-        
+
         for i in range(num_shots):
-            result = self.decode(syndromes[i], return_weight=return_weights)
-            
             if self._observable_matrix is not None:
                 if return_weights:
-                    _, obs, w = result
+                    _, obs, w = cast(
+                        tuple[np.ndarray, np.ndarray, float],
+                        self.decode(syndromes[i], return_weight=True),
+                    )
                     results[i] = obs
+                    assert weights is not None
                     weights[i] = w
                 else:
-                    _, obs = result
+                    _, obs = cast(
+                        tuple[np.ndarray, np.ndarray],
+                        self.decode(syndromes[i], return_weight=False),
+                    )
                     results[i] = obs
             else:
                 if return_weights:
-                    corr, w = result
+                    corr, w = cast(
+                        tuple[np.ndarray, float],
+                        self.decode(syndromes[i], return_weight=True),
+                    )
                     results[i] = corr
+                    assert weights is not None
                     weights[i] = w
                 else:
-                    results[i] = result
-        
+                    results[i] = cast(
+                        np.ndarray,
+                        self.decode(syndromes[i], return_weight=False),
+                    )
+
         if return_weights:
+            assert weights is not None
             return results, weights
         return results
-    
+
     # =========================================================================
     # ILP Model Building and Solving (Pyomo)
     # =========================================================================
-    
+
     def _solve_ilp(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float]:
         """
         Build and solve the ILP model using Pyomo.
-        
+
         ILP Formulation:
             Variables:
                 e[j] ∈ {0,1} for j = 0,...,n-1 (error indicators)
                 a[i] ∈ Z≥0 for i = 0,...,m-1 (auxiliary for mod-2)
-            
+
             Objective:
                 minimize Σ_j weight[j] * e[j]
-            
+
             Constraints (mod-2 linearization):
                 Σ_j H[i,j] * e[j] = syndrome[i] + 2 * a[i]  for all i
         """
@@ -516,14 +543,15 @@ class Decoder:
         from pyomo.environ import SolverFactory, TerminationCondition, value
 
         H = self._H
+        assert H is not None
         m, n = H.shape
-        
+
         if self._pyomo_model is None:
             self._pyomo_model = self._build_pyomo_model()
         model = self._pyomo_model
         for i in range(m):
             model.syndrome_rhs[i] = int(syndrome[i])
-        
+
         # Get solver
         solver_name = get_pyomo_solver_name(self._solver_config.name)
         solver = self._pyomo_solver
@@ -542,14 +570,14 @@ class Decoder:
                 solver.options[key] = val
             self._pyomo_solver = solver
             self._pyomo_solver_name = solver_name
-        
+
         # Solve
         tee = self._solver_config.verbose
         results = solver.solve(model, tee=tee)
-        
+
         # Check status
         self._last_status = str(results.solver.termination_condition)
-        
+
         if results.solver.termination_condition not in (
             TerminationCondition.optimal,
             TerminationCondition.feasible,
@@ -559,32 +587,35 @@ class Decoder:
             raise RuntimeError(
                 f"Solver terminated with status {results.solver.termination_condition}"
             )
-        
+
         # Extract solution
         correction = np.zeros(n, dtype=np.uint8)
         for j in range(n):
             val = value(model.e[j])
             correction[j] = 1 if val is not None and val > 0.5 else 0
-        
-        self._last_objective = value(model.obj)
-        
-        return correction, self._last_objective
+
+        objective = value(model.obj)
+        self._last_objective = float(objective)
+
+        return correction, float(objective)
 
     def _build_pyomo_model(self) -> Any:
         require_pyomo()
         from pyomo.environ import (
-            ConcreteModel,
-            Var,
-            Param,
-            Constraint,
-            Objective,
             Binary,
+            ConcreteModel,
+            Constraint,
             NonNegativeIntegers,
+            Objective,
+            Param,
+            Var,
             minimize,
         )
 
         H = self._H
         weights = self._weights
+        assert H is not None
+        assert weights is not None
         m, n = H.shape
         row_sums = np.sum(H, axis=1).astype(int)
 
@@ -612,6 +643,8 @@ class Decoder:
     def _solve_direct_highs(self, syndrome: np.ndarray) -> Tuple[np.ndarray, float]:
         """Solve the ILP using a direct HiGHS model reused across shots."""
         if self._direct_highs_solver is None:
+            assert self._H is not None
+            assert self._weights is not None
             self._direct_highs_solver = _DirectHighsSolver(
                 self._H, self._weights, self._solver_config
             )
@@ -625,6 +658,8 @@ class Decoder:
         if self._direct_gurobi_solver is None:
             from ilpqec.gurobi_backend import DirectGurobiSolver
 
+            assert self._H is not None
+            assert self._weights is not None
             self._direct_gurobi_solver = DirectGurobiSolver(
                 self._H, self._weights, self._solver_config
             )
@@ -632,14 +667,14 @@ class Decoder:
         self._last_status = status
         self._last_objective = objective
         return correction, objective
-    
+
     # =========================================================================
     # Helper Methods
     # =========================================================================
-    
+
     def _probabilities_to_weights(
-        self, 
-        probs: Union[float, np.ndarray, List[float]], 
+        self,
+        probs: Union[float, np.ndarray, List[float]],
         n: int
     ) -> np.ndarray:
         """Convert error probabilities to log-likelihood ratio weights (p in (0, 0.5])."""
@@ -659,12 +694,12 @@ class Decoder:
 
         # Clip to avoid numerical issues
         probs = np.clip(probs, 1e-15, 1 - 1e-15)
-        
+
         # Log-likelihood ratio: weight = log((1-p)/p)
         weights = np.log((1 - probs) / probs)
-        
-        return np.maximum(weights, 0.0)  # Keep non-negative for minimization
-    
+
+        return np.asarray(np.maximum(weights, 0.0), dtype=float)
+
     def _parse_dem(
         self,
         dem: Union['stim.DetectorErrorModel', str],
@@ -680,11 +715,11 @@ class Decoder:
             dem = stim.DetectorErrorModel(dem)
         if flatten_dem:
             dem = dem.flattened()
-        
+
         # Extract error mechanisms
-        errors = []
-        seen = {}  # For merging parallel edges
-        
+        errors: list[tuple[float, set[int], set[int]]] = []
+        seen: dict[tuple[tuple[int, ...], tuple[int, ...]], int] = {}
+
         dem_str = str(dem)
         detector_offset = 0
         for line in dem_str.strip().split('\n'):
@@ -718,7 +753,7 @@ class Decoder:
                 if line_lower.startswith('detector') or line_lower.startswith('logical_observable'):
                     continue
                 raise ValueError(f"Unsupported DEM instruction: {line}")
-            
+
             # Parse error(p) D... L...
             try:
                 prob_start = line.index('(') + 1
@@ -726,14 +761,14 @@ class Decoder:
             except ValueError as exc:
                 raise ValueError(f"Invalid error instruction: {line}") from exc
             prob = float(line[prob_start:prob_end])
-            
+
             if prob <= 0 or prob >= 1:
                 continue
-            
+
             targets_str = line[prob_end + 1:].strip()
-            detectors = set()
-            observables = set()
-            
+            detectors: set[int] = set()
+            observables: set[int] = set()
+
             for target in targets_str.replace("^", " ").split():
                 target = target.strip()
                 if target.startswith('D'):
@@ -754,10 +789,10 @@ class Decoder:
                         observables.remove(obs_id)
                     else:
                         observables.add(obs_id)
-            
+
             if not detectors and not observables:
                 continue
-            
+
             if merge_parallel:
                 key = (tuple(sorted(detectors)), tuple(sorted(observables)))
                 if key in seen:
@@ -769,12 +804,12 @@ class Decoder:
                     continue
                 else:
                     seen[key] = len(errors)
-            
+
             errors.append((prob, detectors, observables))
-        
+
         if not errors:
             raise ValueError("No valid error mechanisms found in DEM")
-        
+
         # Determine dimensions
         num_errors = len(errors)
         if hasattr(dem, "num_detectors"):
@@ -789,70 +824,70 @@ class Decoder:
             num_observables = (
                 max(max(e[2]) for e in errors if e[2]) + 1 if any(e[2] for e in errors) else 0
             )
-        
+
         # Build matrices
         H = np.zeros((num_detectors, num_errors), dtype=np.uint8)
         obs_matrix = np.zeros((num_observables, num_errors), dtype=np.uint8)
         weights = np.zeros(num_errors)
-        
+
         for j, (prob, dets, obs) in enumerate(errors):
             for d in dets:
                 H[d, j] = 1
             for o in obs:
                 obs_matrix[o, j] = 1
-            
+
             # Weight = log((1-p)/p)
             prob = max(1e-15, min(prob, 1 - 1e-15))
             weights[j] = math.log((1 - prob) / prob)
-        
+
         return H, obs_matrix, weights
-    
+
     # =========================================================================
     # Properties
     # =========================================================================
-    
+
     @property
     def num_detectors(self) -> int:
         """Number of detectors / parity checks."""
         return self._H.shape[0] if self._H is not None else 0
-    
+
     @property
     def num_errors(self) -> int:
         """Number of error mechanisms."""
         return self._H.shape[1] if self._H is not None else 0
-    
+
     @property
     def num_observables(self) -> int:
         """Number of logical observables (for DEM)."""
         return self._observable_matrix.shape[0] if self._observable_matrix is not None else 0
-    
+
     @property
     def solver_name(self) -> str:
         """Name of the configured solver."""
         return self._solver_config.name
-    
+
     @property
     def last_objective(self) -> Optional[float]:
         """Objective value from the last decode() call."""
         return self._last_objective
-    
+
     @property
     def last_status(self) -> Optional[str]:
         """Solver status from the last decode() call."""
         return self._last_status
-    
+
     def get_parity_check_matrix(self) -> Optional[np.ndarray]:
         """Get the parity-check matrix."""
         return self._H
-    
+
     def get_weights(self) -> Optional[np.ndarray]:
         """Get the weights for each error mechanism."""
         return self._weights
-    
+
     def __repr__(self) -> str:
         if self._H is None:
             return "<Decoder (not configured)>"
-        
+
         if self._observable_matrix is not None:
             return (
                 f"<Decoder: {self.num_detectors} detectors, {self.num_errors} errors, "
@@ -870,11 +905,11 @@ class _DirectHighsSolver:
             from highspy import (
                 Highs,
                 HighsLp,
+                HighsModelStatus,
                 HighsSparseMatrix,
+                HighsStatus,
                 HighsVarType,
                 MatrixFormat,
-                HighsStatus,
-                HighsModelStatus,
             )
         except Exception as exc:
             raise ImportError(
@@ -1001,4 +1036,3 @@ class _DirectHighsSolver:
         correction = (values > 0.5).astype(np.uint8)
         objective = float(self._highs.getObjectiveValue())
         return correction, objective, str(model_status)
-
