@@ -51,6 +51,33 @@ error, _ = decoder.decode(syndrome)
 print(error)
 ```
 
+### CSS code analysis from `Hx` and `Hz`
+
+```python
+import numpy as np
+from ilpqec import CSSCode
+
+h = np.array([
+    [1, 0, 1, 0, 1, 0, 1],
+    [0, 1, 1, 0, 0, 1, 1],
+    [0, 0, 0, 1, 1, 1, 1],
+], dtype=np.uint8)
+
+code = CSSCode.from_parity_check_matrices(h, h)
+distance = code.distance(solver="highs")
+reduced = code.logical_basis(reduce=True, solver="highs")
+
+print(distance.d, distance.dx, distance.dz)
+print(distance.shortest_x)
+print(distance.shortest_z)
+print(reduced.x)
+print(reduced.z)
+```
+
+`distance()` returns the globally shortest X/Z logical operators. `logical_basis(reduce=True)`
+keeps the canonical logical cosets and reduces each one to the exact
+minimum-weight representative.
+
 ### Stim DetectorErrorModel decoding
 
 ```python
@@ -77,6 +104,7 @@ for i in range(5):
 
 ## Documentation Map
 
+- CSS parity-check analysis: `css_code.md`
 - Solver backends and configuration: `solvers.md`
 - ILP formulation and assumptions: `math.md`
 - Stim DEM support and caveats: `stim_dem.md`

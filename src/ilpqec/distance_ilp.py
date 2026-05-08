@@ -67,7 +67,7 @@ def minimize_weight_with_fixed_syndrome(
     parity_check_matrix: np.ndarray,
     syndrome: np.ndarray,
     *,
-    solver: str = None,
+    solver: Optional[str] = None,
     **solver_options,
 ) -> MinWeightResult:
     """Minimize Hamming weight subject to Mx = syndrome over GF(2)."""
@@ -84,7 +84,7 @@ def minimize_nonzero_logical_operator(
     check_matrix: np.ndarray,
     dual_logicals: np.ndarray,
     *,
-    solver: str = None,
+    solver: Optional[str] = None,
     **solver_options,
 ) -> MinWeightResult:
     """Minimize Hamming weight with zero syndrome and nonzero dual-logical pairing."""
@@ -179,7 +179,7 @@ def _solve_direct_highs(
         row_lower[-1] = 1.0
         row_upper[-1] = float(num_selectors)
 
-    entries = [[] for _ in range(num_cols)]
+    entries: list[list[tuple[int, float]]] = [[] for _ in range(num_cols)]
     for row in range(num_fixed):
         for col in np.flatnonzero(fixed_matrix[row]):
             entries[int(col)].append((row, 1.0))
@@ -187,6 +187,7 @@ def _solve_direct_highs(
 
     for row in range(num_selectors):
         constraint_row = num_fixed + row
+        assert selector_matrix is not None
         for col in np.flatnonzero(selector_matrix[row]):
             entries[int(col)].append((constraint_row, 1.0))
         entries[n + num_fixed + row].append((constraint_row, -2.0))

@@ -5,6 +5,7 @@ from itertools import product
 import numpy as np
 import pytest
 
+from ilpqec import CSSCode
 from ilpqec.distance_ilp import (
     minimize_nonzero_logical_operator,
     minimize_weight_with_fixed_syndrome,
@@ -94,3 +95,71 @@ def test_exact_ilp_rejects_non_binary_matrix_input():
 
     with pytest.raises(ValueError, match="binary"):
         minimize_weight_with_fixed_syndrome(matrix, syndrome, solver="highs")
+
+
+def steane_check_matrix():
+    return np.array(
+        [
+            [1, 0, 1, 0, 1, 0, 1],
+            [0, 1, 1, 0, 0, 1, 1],
+            [0, 0, 0, 1, 1, 1, 1],
+        ],
+        dtype=np.uint8,
+    )
+
+
+def assert_valid_distance_result(code, result):
+    assert result.d == min(result.dx, result.dz)
+    assert result.dx == int(result.shortest_x.sum())
+    assert result.dz == int(result.shortest_z.sum())
+    assert not np.any((code.hz @ result.shortest_x) % 2)
+    assert not np.any((code.hx @ result.shortest_z) % 2)
+
+
+def test_css_code_distance_for_steane_code():
+    h = steane_check_matrix()
+    code = CSSCode.from_parity_check_matrices(h, h)
+
+    result = code.distance(solver="highs")
+
+    assert result.d == 3
+    assert result.dx == 3
+    assert result.dz == 3
+    assert_valid_distance_result(code, result)
+
+
+def test_css_code_distance_for_two_logical_toy_code():
+    hx = np.array([[1, 1, 0, 0]], dtype=np.uint8)
+    hz = np.array([[0, 0, 1, 1]], dtype=np.uint8)
+    code = CSSCode.from_parity_check_matrices(hx, hz)
+
+    result = code.distance(solver="highs")
+
+    assert result.d == 1
+    assert result.dx == 1
+    assert result.dz == 1
+    assert_valid_distance_result(code, result)
+
+
+def test_reduced_logical_basis_is_paired_and_fixed_coset_minimal():
+    hx = np.array([[1, 1, 0, 0]], dtype=np.uint8)
+    hz = np.array([[0, 0, 1, 1]], dtype=np.uint8)
+    code = CSSCode.from_parity_check_matrices(hx, hz)
+
+    canonical = code.logical_basis(reduce=False)
+    basis = code.logical_basis(reduce=True, solver="highs")
+
+    np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(2, dtype=np.uint8))
+    for index in range(code.k):
+        rhs = np.zeros(code.k, dtype=np.uint8)
+        rhs[index] = 1
+
+        assert not np.any((hz @ basis.x[index]) % 2)
+        assert not np.any((hx @ basis.z[index]) % 2)
+        np.testing.assert_array_equal((canonical.z @ basis.x[index]) % 2, rhs)
+        np.testing.assert_array_equal((canonical.x @ basis.z[index]) % 2, rhs)
+
+        expected_x = brute_force_fixed(hz, canonical.z, rhs)
+        expected_z = brute_force_fixed(hx, canonical.x, rhs)
+        assert int(basis.x[index].sum()) == int(expected_x.sum())
+        assert int(basis.z[index].sum()) == int(expected_z.sum())

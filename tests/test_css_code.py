@@ -99,5 +99,14 @@ def test_logical_basis_rejects_solver_arguments_before_ilp_is_implemented():
     h = steane_check_matrix()
     code = CSSCode.from_parity_check_matrices(h, h)
 
-    with pytest.raises(TypeError, match="solver options are not supported"):
+    with pytest.raises(TypeError, match="only supported when reduce=True"):
         code.logical_basis(reduce=False, solver="highs")
+
+
+def test_distance_raises_for_zero_logical_qubits():
+    hx = np.eye(2, dtype=np.uint8)
+    hz = np.zeros((0, 2), dtype=np.uint8)
+    code = CSSCode.from_parity_check_matrices(hx, hz)
+
+    with pytest.raises(ValueError, match="no logical qubits"):
+        code.distance()

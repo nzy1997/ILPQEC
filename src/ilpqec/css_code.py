@@ -7,6 +7,10 @@ from typing import Optional
 
 import numpy as np
 
+from ilpqec.distance_ilp import (
+    minimize_nonzero_logical_operator,
+    minimize_weight_with_fixed_syndrome,
+)
 from ilpqec.gf2 import css_logical_basis, rank
 
 
@@ -131,24 +135,70 @@ class CSSCode:
         self,
         *,
         reduce: bool = False,
-        solver: str = None,
+        solver: Optional[str] = None,
         **solver_options,
     ) -> CSSLogicalBasis:
         """Return paired logical bases, optionally reduced with exact ILP."""
         self._require_logicals()
-        if reduce:
-            raise NotImplementedError("Reduced logical basis is implemented in the ILP task")
-        if solver is not None or solver_options:
-            raise TypeError("solver options are not supported until reduced logical bases are implemented")
         basis = self._canonical_logical_basis()
-        return CSSLogicalBasis(x=basis.x.copy(), z=basis.z.copy())
+        if not reduce:
+            if solver is not None or solver_options:
+                raise TypeError(
+                    "solver options are only supported when reduce=True"
+                )
+            return CSSLogicalBasis(x=basis.x.copy(), z=basis.z.copy())
+
+        reduced_x = np.zeros_like(basis.x)
+        reduced_z = np.zeros_like(basis.z)
+        for index in range(self.k):
+            rhs = np.zeros(self.k, dtype=np.uint8)
+            rhs[index] = 1
+
+            x_matrix = np.vstack([self._hz, basis.z])
+            x_syndrome = np.concatenate([np.zeros(self._hz.shape[0], dtype=np.uint8), rhs])
+            reduced_x[index] = minimize_weight_with_fixed_syndrome(
+                x_matrix,
+                x_syndrome,
+                solver=solver,
+                **solver_options,
+            ).vector
+
+            z_matrix = np.vstack([self._hx, basis.x])
+            z_syndrome = np.concatenate([np.zeros(self._hx.shape[0], dtype=np.uint8), rhs])
+            reduced_z[index] = minimize_weight_with_fixed_syndrome(
+                z_matrix,
+                z_syndrome,
+                solver=solver,
+                **solver_options,
+            ).vector
+
+        return CSSLogicalBasis(x=reduced_x, z=reduced_z)
 
     def distance(
         self,
         *,
-        solver: str = None,
+        solver: Optional[str] = None,
         **solver_options,
     ) -> CSSDistanceResult:
         """Return exact CSS code distance and shortest X/Z logicals."""
         self._require_logicals()
-        raise NotImplementedError("Distance is implemented in the ILP task")
+        basis = self._canonical_logical_basis()
+        shortest_x = minimize_nonzero_logical_operator(
+            self._hz,
+            basis.z,
+            solver=solver,
+            **solver_options,
+        )
+        shortest_z = minimize_nonzero_logical_operator(
+            self._hx,
+            basis.x,
+            solver=solver,
+            **solver_options,
+        )
+        return CSSDistanceResult(
+            d=min(shortest_x.weight, shortest_z.weight),
+            dx=shortest_x.weight,
+            dz=shortest_z.weight,
+            shortest_x=shortest_x.vector.copy(),
+            shortest_z=shortest_z.vector.copy(),
+        )
