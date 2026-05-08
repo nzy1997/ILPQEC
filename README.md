@@ -13,6 +13,7 @@ What it does well:
 - **Out-of-the-box decoding** with minimal setup.
 - **Inputs from parity-check matrices** or **Stim DetectorErrorModel**.
 - **Maximum-likelihood decoding** via weights or error probabilities.
+- **Exact CSS code analysis** from `Hx` and `Hz`, including code distance and logical operators.
 - **PyMatching-like API** for easy experimentation.
 
 When it is not a fit:
@@ -49,6 +50,9 @@ PyPI package and import name: `ilpqec`.
 ```bash
 # Basic installation
 uv pip install ilpqec
+
+# Direct HiGHS backend for decoding and CSS analysis
+uv pip install highspy
 
 # With Stim support
 uv pip install ilpqec[stim]
@@ -131,6 +135,43 @@ print(f"Correction: {correction}")
 ```
 
 Note: passing SciPy sparse matrices requires `scipy` to be installed (e.g., `uv pip install ilpqec[scipy]`).
+
+### CSS Code Distance and Logical Operators
+
+```python
+import numpy as np
+from ilpqec import CSSCode
+
+h = np.array([
+    [1, 0, 1, 0, 1, 0, 1],
+    [0, 1, 1, 0, 0, 1, 1],
+    [0, 0, 0, 1, 1, 1, 1],
+], dtype=np.uint8)
+
+code = CSSCode.from_parity_check_matrices(h, h)
+
+distance = code.distance(solver="highs")
+print(distance.d, distance.dx, distance.dz)
+print(distance.shortest_x)
+print(distance.shortest_z)
+
+basis = code.logical_basis(reduce=False)
+reduced = code.logical_basis(reduce=True, solver="highs")
+print(basis.x @ basis.z.T % 2)
+print(reduced.x)
+print(reduced.z)
+```
+
+`distance()` returns globally shortest nontrivial X/Z logical operators. `logical_basis(reduce=True)`
+instead fixes the canonical logical cosets from Gaussian elimination and reduces
+each generator to the exact minimum-weight representative of that coset.
+
+Notes:
+- CSS analysis currently supports binary CSS codes only.
+- Exact `distance()` and `logical_basis(reduce=True)` require the direct HiGHS backend.
+- Positive solver gaps are rejected; these APIs raise instead of returning approximate results.
+- If `k == 0`, logical-operator APIs raise `ValueError`.
+- SciPy sparse `Hx` / `Hz` inputs require `uv pip install ilpqec[scipy]`.
 
 ### Stim DetectorErrorModel Decoding
 

@@ -16,24 +16,24 @@ Supported Solvers:
 Example:
     # Use default solver (HiGHS)
     decoder = Decoder.from_parity_check_matrix(H)
-    
+
     # Use specific solver
     decoder = Decoder.from_parity_check_matrix(H, solver="highs")
-    
+
     # Change solver
     decoder.set_solver("gurobi", time_limit=60)
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
 import shutil
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 
 @dataclass
 class SolverConfig:
     """
     Configuration for ILP solver.
-    
+
     Attributes:
         name: Solver name (highs, scip, gurobi, cplex, cbc, glpk)
         time_limit: Maximum solving time in seconds
@@ -49,12 +49,12 @@ class SolverConfig:
     threads: Optional[int] = None
     verbose: bool = False
     direct: bool = False
-    options: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_pyomo_options(self) -> Dict[str, Any]:
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_pyomo_options(self) -> dict[str, Any]:
         """Convert to Pyomo solver options."""
-        opts = {}
-        
+        opts: dict[str, Any] = {}
+
         if self.name == "scip":
             if self.time_limit is not None:
                 opts["limits/time"] = self.time_limit
@@ -83,14 +83,17 @@ class SolverConfig:
                 opts["threads"] = self.threads
         elif self.name in ("cbc", "glpk"):
             if self.time_limit is not None:
-                opts["seconds"] = self.time_limit if self.name == "cbc" else None
-                opts["tmlim"] = self.time_limit if self.name == "glpk" else None
+                if self.name == "cbc":
+                    opts["seconds"] = self.time_limit
+                else:
+                    opts["tmlim"] = self.time_limit
             if self.gap is not None:
-                opts["ratioGap"] = self.gap if self.name == "cbc" else None
-        
+                if self.name == "cbc":
+                    opts["ratioGap"] = self.gap
+
         # Add any custom options
         opts.update(self.options)
-        
+
         # Remove None values
         return {k: v for k, v in opts.items() if v is not None}
 
@@ -144,16 +147,16 @@ def require_pyomo() -> None:
         )
 
 
-def get_available_solvers() -> List[str]:
+def get_available_solvers() -> list[str]:
     """
     Get list of available solvers.
-    
+
     Returns:
         List of solver names that are installed and available.
     """
     import logging
     import warnings
-    
+
     available = []
     if _highs_available():
         available.append("highs")
@@ -161,10 +164,10 @@ def get_available_solvers() -> List[str]:
         available.append("gurobi")
     if not is_pyomo_available():
         return list(dict.fromkeys(available))
-    
+
     # Suppress Pyomo warnings during solver detection
     logging.getLogger('pyomo').setLevel(logging.ERROR)
-    
+
     for solver_name, executables in SOLVER_EXECUTABLES.items():
         if solver_name == "highs":
             continue
@@ -189,19 +192,19 @@ def get_available_solvers() -> List[str]:
                             continue
             except Exception:
                 pass
-    
+
     return list(dict.fromkeys(available))
 
 
 def get_default_solver() -> str:
     """
     Get the default solver.
-    
+
     Returns HiGHS if available, otherwise the first available solver.
-    
+
     Returns:
         Name of the default solver.
-        
+
     Raises:
         RuntimeError: If no solver is available.
     """
@@ -213,7 +216,7 @@ def get_default_solver() -> str:
             return solver
     if available:
         return available[0]
-    
+
     raise RuntimeError(
         "No ILP solver available. Please install one of:\n"
         "  - HiGHS: pip install highspy\n"
@@ -225,22 +228,22 @@ def get_default_solver() -> str:
 def get_pyomo_solver_name(solver: str) -> str:
     """
     Get the Pyomo solver name for a given solver.
-    
+
     Args:
         solver: User-facing solver name
-        
+
     Returns:
         Pyomo-compatible solver name
     """
     import logging
     import warnings
-    
+
     # Suppress Pyomo warnings
     logging.getLogger('pyomo').setLevel(logging.ERROR)
-    
+
     # Try executables in order
     executables = SOLVER_EXECUTABLES.get(solver.lower(), [solver])
-    
+
     try:
         from pyomo.environ import SolverFactory
         with warnings.catch_warnings():
@@ -254,6 +257,6 @@ def get_pyomo_solver_name(solver: str) -> str:
                     continue
     except Exception:
         pass
-    
+
     # Return first option as fallback
     return executables[0] if executables else solver

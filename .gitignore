@@ -3,6 +3,9 @@ PyMatching/
 Stim/
 ldpc/
 
+# Local implementation worktrees
+.worktrees/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
