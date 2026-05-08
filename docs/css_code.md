@@ -15,6 +15,23 @@ Use [`CSSCode`](/Users/nzy/pycode/ILPQEC/.worktrees/css-code-distance/src/ilpqec
 The current exact-analysis path supports binary CSS codes only and uses the
 direct HiGHS backend.
 
+## Requirements
+
+Install the core package plus any optional dependencies you need:
+
+```bash
+uv pip install ilpqec
+uv pip install highspy
+```
+
+Optional extras:
+
+- install `ilpqec[scipy]` if you want to pass SciPy sparse parity-check matrices
+- install `ilpqec[stim]` only if you also use Stim-based decoding APIs elsewhere
+
+The CSS analysis APIs require an exact direct HiGHS solve. They do not support
+Pyomo-backed solvers or approximate MIP gaps.
+
 ## Build a CSS code
 
 ```python
@@ -42,6 +59,19 @@ code = CSSCode.from_parity_check_matrices(Hx, Hz, validate_commutation=True)
 ```
 
 This checks `Hx @ Hz.T == 0 mod 2`.
+
+Accepted inputs:
+
+- dense NumPy arrays
+- Python nested lists that convert to binary matrices
+- SciPy sparse matrices when `scipy` is installed
+
+Rejected inputs:
+
+- non-binary entries
+- non-2D matrices
+- mismatched column counts
+- non-commuting `Hx, Hz` pairs unless `validate_commutation=False`
 
 ## Exact distance
 
@@ -94,6 +124,24 @@ That distinction matters:
 - `logical_basis(reduce=True)` gives a paired basis where each returned row is
   the strict minimum-weight representative of its fixed canonical coset.
 
+## Choosing the API
+
+Use `distance()` when you want code parameters:
+
+- exact `dx`, `dz`, and `d`
+- one shortest X logical
+- one shortest Z logical
+
+Use `logical_basis(reduce=False)` when you want a fast canonical paired basis
+from GF(2) elimination.
+
+Use `logical_basis(reduce=True)` when you want a paired basis but also want each
+canonical logical generator reduced exactly inside its own fixed coset.
+
+`logical_basis(reduce=True)` is not a substitute for `distance()`. A reduced
+basis generator can be heavier than the globally shortest logical operator,
+because it is constrained to remain in one selected canonical coset.
+
 ## Exactness and errors
 
 - Positive optimality gaps are rejected.
@@ -101,3 +149,31 @@ That distinction matters:
   approximate answer.
 - If `k == 0`, `distance()` and `logical_basis()` raise `ValueError` because
   logical operators are undefined.
+
+## Common errors
+
+`ImportError: Direct HiGHS backend requires highspy`
+
+- install `highspy`
+- pass `solver="highs"` or rely on the default exact backend
+
+`ImportError: Sparse CSS parity-check matrices require SciPy`
+
+- install `ilpqec[scipy]`
+- or convert sparse matrices to dense arrays before calling `CSSCode`
+
+`ValueError: CSS parity checks must commute`
+
+- ensure `Hx @ Hz.T == 0 mod 2`
+- only disable commutation validation if you explicitly want to inspect an
+  invalid pair
+
+`ValueError: CSS code has no logical qubits`
+
+- this means `k == 0`
+- distance and logical-operator APIs are undefined for such a code
+
+`ValueError: CSS distance APIs require exact optimization`
+
+- do not pass a positive `gap`
+- these APIs intentionally refuse approximate MIP solves

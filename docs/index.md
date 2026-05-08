@@ -78,6 +78,9 @@ print(reduced.z)
 keeps the canonical logical cosets and reduces each one to the exact
 minimum-weight representative.
 
+This exact-analysis path currently supports binary CSS codes only and requires
+the direct HiGHS backend.
+
 ### Stim DetectorErrorModel decoding
 
 ```python

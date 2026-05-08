@@ -51,6 +51,9 @@ PyPI package and import name: `ilpqec`.
 # Basic installation
 uv pip install ilpqec
 
+# Direct HiGHS backend for decoding and CSS analysis
+uv pip install highspy
+
 # With Stim support
 uv pip install ilpqec[stim]
 
@@ -162,6 +165,13 @@ print(reduced.z)
 `distance()` returns globally shortest nontrivial X/Z logical operators. `logical_basis(reduce=True)`
 instead fixes the canonical logical cosets from Gaussian elimination and reduces
 each generator to the exact minimum-weight representative of that coset.
+
+Notes:
+- CSS analysis currently supports binary CSS codes only.
+- Exact `distance()` and `logical_basis(reduce=True)` require the direct HiGHS backend.
+- Positive solver gaps are rejected; these APIs raise instead of returning approximate results.
+- If `k == 0`, logical-operator APIs raise `ValueError`.
+- SciPy sparse `Hx` / `Hz` inputs require `uv pip install ilpqec[scipy]`.
 
 ### Stim DetectorErrorModel Decoding
 
