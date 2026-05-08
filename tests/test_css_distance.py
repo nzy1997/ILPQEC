@@ -163,3 +163,41 @@ def test_reduced_logical_basis_is_paired_and_fixed_coset_minimal():
         expected_z = brute_force_fixed(hx, canonical.x, rhs)
         assert int(basis.x[index].sum()) == int(expected_x.sum())
         assert int(basis.z[index].sum()) == int(expected_z.sum())
+
+
+def test_css_code_distance_for_three_logical_toy_code():
+    hx = np.array([[1, 1, 0, 0, 0]], dtype=np.uint8)
+    hz = np.array([[0, 0, 1, 1, 0]], dtype=np.uint8)
+    code = CSSCode.from_parity_check_matrices(hx, hz)
+
+    result = code.distance(solver="highs")
+
+    assert code.k == 3
+    assert result.d == 1
+    assert result.dx == 1
+    assert result.dz == 1
+    assert_valid_distance_result(code, result)
+
+
+def test_reduced_logical_basis_is_paired_and_fixed_coset_minimal_for_three_logicals():
+    hx = np.array([[1, 1, 0, 0, 0]], dtype=np.uint8)
+    hz = np.array([[0, 0, 1, 1, 0]], dtype=np.uint8)
+    code = CSSCode.from_parity_check_matrices(hx, hz)
+
+    canonical = code.logical_basis(reduce=False)
+    basis = code.logical_basis(reduce=True, solver="highs")
+
+    np.testing.assert_array_equal((basis.x @ basis.z.T) % 2, np.eye(3, dtype=np.uint8))
+    for index in range(code.k):
+        rhs = np.zeros(code.k, dtype=np.uint8)
+        rhs[index] = 1
+
+        assert not np.any((hz @ basis.x[index]) % 2)
+        assert not np.any((hx @ basis.z[index]) % 2)
+        np.testing.assert_array_equal((canonical.z @ basis.x[index]) % 2, rhs)
+        np.testing.assert_array_equal((canonical.x @ basis.z[index]) % 2, rhs)
+
+        expected_x = brute_force_fixed(hz, canonical.z, rhs)
+        expected_z = brute_force_fixed(hx, canonical.x, rhs)
+        assert int(basis.x[index].sum()) == int(expected_x.sum())
+        assert int(basis.z[index].sum()) == int(expected_z.sum())
