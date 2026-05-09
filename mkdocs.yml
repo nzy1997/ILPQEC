@@ -27,6 +27,7 @@ extra_javascript:
 nav:
   - Home: index.md
   - CSS Code Analysis: css_code.md
+  - DEM Equivalent Distance: dem_distance.md
   - Solver Backends: solvers.md
   - Mathematical Formulation: math.md
   - Stim DEM Support: stim_dem.md

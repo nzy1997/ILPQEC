@@ -29,3 +29,31 @@ fast instead, pass `flatten_dem=False` when creating the decoder.
 - Use `decompose_errors=True` when constructing DEMs from Stim circuits.
 - Use `flatten_dem=True` unless the DEM is very large, and then pre-flatten
   only when needed.
+
+## Equivalent Distance Analysis
+
+ILPQEC also exposes `dem_distance(...)` for exact minimum-weight logical-fault
+search directly on a DEM.
+
+```python
+import stim
+from ilpqec import dem_distance
+
+circuit = stim.Circuit.generated(
+    "surface_code:rotated_memory_x",
+    distance=3,
+    rounds=3,
+    after_clifford_depolarization=0.01,
+)
+
+dem = circuit.detector_error_model(decompose_errors=True)
+
+result = dem_distance(dem, solver="highs")
+targeted = dem_distance(dem, target_observables=[1], solver="highs")
+
+print(result.distance)
+print(targeted.observable_mask)
+```
+
+This objective ignores the `error(p)` probabilities stored in the DEM and
+minimizes the number of selected DEM mechanisms instead.

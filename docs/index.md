@@ -105,9 +105,37 @@ for i in range(5):
     print(f"shot {i}: predicted={predicted}, actual={observables[i]}")
 ```
 
+### DEM equivalent distance
+
+```python
+import stim
+from ilpqec import dem_distance
+
+circuit = stim.Circuit.generated(
+    "surface_code:rotated_memory_x",
+    distance=3,
+    rounds=3,
+    after_clifford_depolarization=0.01,
+)
+
+dem = circuit.detector_error_model(decompose_errors=True)
+
+result = dem_distance(dem, solver="highs")
+targeted = dem_distance(dem, target_observables=[1], solver="highs")
+
+print(result.distance)
+print(targeted.observable_mask)
+```
+
+`dem_distance(...)` returns an exact minimum-weight logical fault for the DEM.
+If `target_observables` is provided, it instead enforces that exact nonzero
+logical mask. The objective ignores `error(p)` probabilities and minimizes the
+number of selected DEM mechanisms.
+
 ## Documentation Map
 
 - CSS parity-check analysis: `css_code.md`
+- DEM equivalent distance: `dem_distance.md`
 - Solver backends and configuration: `solvers.md`
 - ILP formulation and assumptions: `math.md`
 - Stim DEM support and caveats: `stim_dem.md`
