@@ -99,6 +99,37 @@ def test_dem_distance_targeted_mode_builds_augmented_matrix_and_syndrome(monkeyp
     np.testing.assert_array_equal(result.observable_mask, np.array([1, 1], dtype=np.uint8))
 
 
+def test_dem_distance_exact_solver_validation_errors_use_generic_wording():
+    dem = "error(0.1) D0 L0\n"
+
+    with pytest.raises(ValueError, match="Exact distance APIs require exact optimization"):
+        dem_distance(dem, solver="highs", gap=0.1)
+
+    with pytest.raises(ValueError, match="Exact distance ILP currently supports the direct HiGHS backend"):
+        dem_distance(dem, solver="cbc")
+
+
+def test_dem_distance_targeted_mode_surfaces_runtime_error_from_exact_solve(monkeypatch):
+    h_matrix = np.array([[1, 0, 1]], dtype=np.uint8)
+    obs_matrix = np.array([[1, 1, 0]], dtype=np.uint8)
+
+    def fake_parse_dem(self, dem, merge_parallel, flatten_dem):
+        return h_matrix.copy(), obs_matrix.copy(), np.zeros(3)
+
+    def fake_minimize_weight_with_fixed_syndrome(matrix, syndrome, *, solver=None, **solver_options):
+        raise RuntimeError("HiGHS did not prove optimality: kInfeasible")
+
+    monkeypatch.setattr(dem_distance_module.Decoder, "_parse_dem", fake_parse_dem)
+    monkeypatch.setattr(
+        dem_distance_module,
+        "minimize_weight_with_fixed_syndrome",
+        fake_minimize_weight_with_fixed_syndrome,
+    )
+
+    with pytest.raises(RuntimeError, match="did not prove optimality"):
+        dem_distance("fake dem", target_observables=[1], solver="highs")
+
+
 def test_dem_distance_returns_defensive_copies(monkeypatch):
     shared_vector = np.array([1, 0, 1], dtype=np.uint8)
     h_matrix = np.zeros((1, 3), dtype=np.uint8)

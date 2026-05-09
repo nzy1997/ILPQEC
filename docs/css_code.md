@@ -173,7 +173,7 @@ because it is constrained to remain in one selected canonical coset.
 - this means `k == 0`
 - distance and logical-operator APIs are undefined for such a code
 
-`ValueError: CSS distance APIs require exact optimization`
+`ValueError: Exact distance APIs require exact optimization`
 
 - do not pass a positive `gap`
 - these APIs intentionally refuse approximate MIP solves

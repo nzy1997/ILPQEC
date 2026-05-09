@@ -46,6 +46,9 @@ call constrains the returned fault to flip the requested logical observable mask
   matching `Decoder.from_stim_dem(...)`.
 - The `solver` argument is therefore currently expected to be `"highs"`, and
   extra keyword arguments are forwarded to that direct HiGHS solve.
+- If a targeted observable mask is infeasible, or if the exact solve exits
+  without proving optimality, `dem_distance(...)` raises `RuntimeError` from
+  the exact solve path.
 
 ## Result Fields
 
