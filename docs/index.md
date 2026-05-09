@@ -129,8 +129,10 @@ print(targeted.observable_mask)
 
 `dem_distance(...)` returns an exact minimum-weight logical fault for the DEM.
 If `target_observables` is provided, it instead enforces that exact nonzero
-logical mask. The objective ignores `error(p)` probabilities and minimizes the
-number of selected DEM mechanisms.
+logical mask. This exact-analysis path currently follows the same
+direct-HiGHS-only restriction as the CSS exact-distance helpers. The objective
+ignores `error(p)` probabilities and minimizes the number of selected
+parser-produced DEM mechanisms.
 
 ## Documentation Map
 

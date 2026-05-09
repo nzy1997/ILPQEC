@@ -235,8 +235,9 @@ print(targeted.observable_mask)
 
 `dem_distance(...)` solves for an exact minimum-weight logical fault in the DEM.
 With `target_observables=[...]`, it instead finds the minimum-weight fault with
-that exact logical effect. The objective ignores `error(p)` probabilities and
-counts DEM mechanisms only.
+that exact logical effect. This exact-analysis path currently follows the same
+direct-HiGHS-only restriction as the CSS exact-distance helpers. The objective
+ignores `error(p)` probabilities and counts parser-produced DEM mechanisms only.
 
 ### Sinter Integration (optional)
 

@@ -33,6 +33,8 @@ call constrains the returned fault to flip the requested logical observable mask
 ## Semantics
 
 - The input DEM must contain at least one logical observable.
+- Exact DEM distance currently has the same backend restriction as the CSS
+  exact-distance helpers: it requires the direct HiGHS backend.
 - The optimization objective is Hamming weight over DEM mechanisms, not
   likelihood. `error(p)` probabilities are ignored by `dem_distance(...)`.
 - `target_observables=None` searches for the minimum-weight fault whose logical
@@ -42,17 +44,19 @@ call constrains the returned fault to flip the requested logical observable mask
   observable count, and contain at least one `1`.
 - `merge_parallel_edges` and `flatten_dem` are passed through to the DEM parser,
   matching `Decoder.from_stim_dem(...)`.
-- `solver` and extra keyword arguments are forwarded to the underlying ILP
-  solve.
+- The `solver` argument is therefore currently expected to be `"highs"`, and
+  extra keyword arguments are forwarded to that direct HiGHS solve.
 
 ## Result Fields
 
 `dem_distance(...)` returns a `DEMDistanceResult` dataclass with:
 
 - `distance`: minimum number of DEM mechanisms in the returned logical fault.
-- `fault_vector`: binary NumPy vector over DEM mechanisms, with `1` entries for
-  selected mechanisms.
-- `fault_indices`: Python list of the selected mechanism indices.
+- `fault_vector`: binary NumPy vector over the parser-produced DEM columns, with
+  `1` entries for selected mechanisms after any `flatten_dem` /
+  `merge_parallel_edges` preprocessing.
+- `fault_indices`: Python list of indices into that same parser-produced DEM
+  column ordering, not stable references to original DEM source lines.
 - `observable_mask`: binary NumPy vector giving the logical observables flipped
   by `fault_vector`.
 
