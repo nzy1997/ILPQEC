@@ -104,3 +104,33 @@ Results from a local macOS arm64 run (shots=10000):
 | MWPM (pymatching) | 0.0034 | 13.420% |
 | BPOSD (ldpc) | 0.0114 | 9.830% |
 | Tesseract | 0.0600 | 4.450% |
+
+## DEM equivalent distance on rotated surface-code memory
+
+Use the dedicated exact-analysis benchmark when you want to measure how large a
+Stim DEM instance can be solved to proven optimality:
+
+```bash
+benchmark/.venv/bin/python benchmark/benchmark_dem_distance.py \
+  --distances 3,5,7,9 --solver highs --time-limit 300
+```
+
+The script generates one circuit per requested distance, converts it to a
+decomposed DEM, parses the DEM with `Decoder()._parse_dem(...)`, and then runs
+`dem_distance(...)` on that exact model.
+
+Each output row reports:
+
+- `distance`: the generated circuit distance
+- `rounds`: the number of syndrome-extraction rounds used for that instance
+- `detectors`: the DEM detector count
+- `mechanisms`: the number of parsed DEM error mechanisms after flattening and
+  parallel-edge merging
+- `equivalent_distance`: the solved exact minimum logical-fault weight when the
+  solve succeeds
+- `time`: wall-clock runtime for the `dem_distance(...)` call
+- `status`: `optimal` when HiGHS proves optimality, otherwise the solver error
+  text for failures or time-limited runs
+
+This is a local exact benchmark, so the largest solvable distance depends on
+your machine, solver version, noise model, and time limit.
