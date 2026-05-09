@@ -354,7 +354,7 @@ def test_solve_direct_highs_rejects_passmodel_failure(monkeypatch):
 
 def test_solve_direct_highs_rejects_run_failure(monkeypatch):
     _install_fake_highspy(monkeypatch, run_status=-1)
-    with pytest.raises(RuntimeError, match="failed to solve CSS distance model"):
+    with pytest.raises(RuntimeError, match="failed to solve exact distance model"):
         distance_ilp_module._solve_direct_highs(
             np.eye(1, dtype=np.uint8),
             np.zeros(1, dtype=np.uint8),

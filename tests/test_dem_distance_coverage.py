@@ -130,6 +130,27 @@ def test_dem_distance_targeted_mode_surfaces_runtime_error_from_exact_solve(monk
         dem_distance("fake dem", target_observables=[1], solver="highs")
 
 
+def test_dem_distance_default_mode_surfaces_generic_run_failure(monkeypatch):
+    h_matrix = np.array([[1, 0, 1]], dtype=np.uint8)
+    obs_matrix = np.array([[1, 1, 0]], dtype=np.uint8)
+
+    def fake_parse_dem(self, dem, merge_parallel, flatten_dem):
+        return h_matrix.copy(), obs_matrix.copy(), np.zeros(3)
+
+    def fake_minimize_nonzero_logical_operator(check_matrix, dual_logicals, *, solver=None, **solver_options):
+        raise RuntimeError("HiGHS failed to solve exact distance model")
+
+    monkeypatch.setattr(dem_distance_module.Decoder, "_parse_dem", fake_parse_dem)
+    monkeypatch.setattr(
+        dem_distance_module,
+        "minimize_nonzero_logical_operator",
+        fake_minimize_nonzero_logical_operator,
+    )
+
+    with pytest.raises(RuntimeError, match="failed to solve exact distance model"):
+        dem_distance("fake dem", solver="highs")
+
+
 def test_dem_distance_returns_defensive_copies(monkeypatch):
     shared_vector = np.array([1, 0, 1], dtype=np.uint8)
     h_matrix = np.zeros((1, 3), dtype=np.uint8)

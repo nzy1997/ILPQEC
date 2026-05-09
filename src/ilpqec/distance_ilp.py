@@ -228,7 +228,7 @@ def _solve_direct_highs(
 
     status = highs.run()
     if status != HighsStatus.kOk:
-        raise RuntimeError("HiGHS failed to solve CSS distance model")
+        raise RuntimeError("HiGHS failed to solve exact distance model")
 
     model_status = highs.getModelStatus()
     if model_status != HighsModelStatus.kOptimal:
