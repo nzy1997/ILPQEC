@@ -141,19 +141,6 @@ def main():
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    print("Benchmarking DEM equivalent distance")
-    print(
-        "code_task={code_task} noise_model={noise_model} distances={distances} noise={noise} "
-        "solver={solver} time_limit={time_limit}".format(
-            code_task=args.code_task,
-            noise_model=args.noise_model,
-            distances=",".join(str(distance) for distance in distances),
-            noise=args.noise,
-            solver=args.solver,
-            time_limit=args.time_limit,
-        )
-    )
-
     for distance in distances:
         rounds = args.rounds if args.rounds is not None else distance
         print(
