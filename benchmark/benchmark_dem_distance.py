@@ -48,6 +48,17 @@ def build_circuit(stim, code_task: str, noise_model: str, distance: int, rounds:
     )
 
 
+def parse_solver(raw: str) -> str:
+    """Validate the currently supported exact benchmark solver."""
+    solver = raw.strip().lower()
+    if solver != "highs":
+        raise argparse.ArgumentTypeError(
+            "benchmark_dem_distance.py currently supports only the direct HiGHS exact path "
+            "(use --solver highs)"
+        )
+    return solver
+
+
 def benchmark_one(
     *,
     stim,
@@ -70,6 +81,8 @@ def benchmark_one(
     try:
         result = dem_distance(
             dem,
+            merge_parallel_edges=True,
+            flatten_dem=True,
             solver=solver,
             time_limit=time_limit,
         )
@@ -122,7 +135,12 @@ def main():
         help="Number of rounds. Defaults to each circuit distance.",
     )
     parser.add_argument("--noise", type=float, default=0.01)
-    parser.add_argument("--solver", type=str, default="highs")
+    parser.add_argument(
+        "--solver",
+        type=parse_solver,
+        default="highs",
+        help="Exact benchmark solver. Currently only the direct HiGHS path is supported.",
+    )
     parser.add_argument(
         "--time-limit",
         type=float,

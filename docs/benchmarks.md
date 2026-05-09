@@ -115,9 +115,14 @@ benchmark/.venv/bin/python benchmark/benchmark_dem_distance.py \
   --distances 3,5,7,9 --solver highs --time-limit 300
 ```
 
+This benchmark currently targets only the exact direct-HiGHS path. Keep
+`--solver highs`; other solver names are rejected at the CLI layer.
+
 The script generates one circuit per requested distance, converts it to a
 decomposed DEM, parses the DEM with `Decoder()._parse_dem(...)`, and then runs
-`dem_distance(...)` on that exact model.
+`dem_distance(...)` on that exact model using the same
+`merge_parallel_edges=True` and `flatten_dem=True` settings as the mechanism
+count path.
 
 Each output row reports:
 
