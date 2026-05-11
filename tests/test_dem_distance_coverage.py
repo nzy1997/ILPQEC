@@ -13,34 +13,48 @@ from ilpqec import dem_distance
 dem_distance_module = importlib.import_module("ilpqec.dem_distance")
 
 
+class FakeDem:
+    """Minimal DEM-like object for validation-only tests."""
+
+    def __init__(self, text: str):
+        self._text = text
+
+    def __str__(self) -> str:
+        return self._text
+
+    def flattened(self) -> "FakeDem":
+        return self
+
+
 def test_dem_distance_rejects_dem_without_logical_observables():
+    dem = FakeDem("error(0.1) D0\n")
     with pytest.raises(ValueError, match="at least one logical observable"):
-        dem_distance("error(0.1) D0", solver="highs")
+        dem_distance(dem, solver="highs")
 
 
 def test_dem_distance_rejects_target_length_mismatch():
-    dem = "error(0.1) D0 L0\n"
+    dem = FakeDem("error(0.1) D0 L0\n")
 
     with pytest.raises(ValueError, match="length"):
         dem_distance(dem, target_observables=[1, 0], solver="highs")
 
 
 def test_dem_distance_rejects_non_binary_target():
-    dem = "error(0.1) D0 L0\n"
+    dem = FakeDem("error(0.1) D0 L0\n")
 
     with pytest.raises(ValueError, match="binary"):
         dem_distance(dem, target_observables=[2], solver="highs")
 
 
 def test_dem_distance_rejects_zero_target_mask():
-    dem = "error(0.1) D0 L0\n"
+    dem = FakeDem("error(0.1) D0 L0\n")
 
     with pytest.raises(ValueError, match="nonzero"):
         dem_distance(dem, target_observables=[0], solver="highs")
 
 
 def test_dem_distance_rejects_non_1d_target():
-    dem = "error(0.1) D0 L0\n"
+    dem = FakeDem("error(0.1) D0 L0\n")
 
     with pytest.raises(ValueError, match="one-dimensional"):
         dem_distance(dem, target_observables=np.array([[1]], dtype=np.uint8), solver="highs")
@@ -100,7 +114,7 @@ def test_dem_distance_targeted_mode_builds_augmented_matrix_and_syndrome(monkeyp
 
 
 def test_dem_distance_exact_solver_validation_errors_use_generic_wording():
-    dem = "error(0.1) D0 L0\n"
+    dem = FakeDem("error(0.1) D0 L0\n")
 
     with pytest.raises(ValueError, match="Exact distance APIs require exact optimization"):
         dem_distance(dem, solver="highs", gap=0.1)
