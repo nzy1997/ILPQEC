@@ -15,6 +15,21 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+class FakeDem:
+    """Minimal DEM-like object that avoids requiring stim for string parsing."""
+
+    def __init__(self, text: str, *, num_detectors: int, num_observables: int):
+        self._text = text
+        self.num_detectors = num_detectors
+        self.num_observables = num_observables
+
+    def __str__(self) -> str:
+        return self._text
+
+    def flattened(self) -> "FakeDem":
+        return self
+
+
 def brute_force_dem_distance(h_matrix, obs_matrix, target=None):
     h_matrix = np.asarray(h_matrix, dtype=np.uint8)
     obs_matrix = np.asarray(obs_matrix, dtype=np.uint8)
@@ -42,11 +57,13 @@ def brute_force_dem_distance(h_matrix, obs_matrix, target=None):
 
 
 def test_dem_distance_default_mode_matches_bruteforce():
-    dem = """
-        error(0.1) D0
-        error(0.1) D0 L0
-        error(0.1) L0
-    """
+    dem = FakeDem(
+        "error(0.1) D0\n"
+        "error(0.1) D0 L0\n"
+        "error(0.1) L0\n",
+        num_detectors=1,
+        num_observables=1,
+    )
 
     h_matrix, obs_matrix, _ = Decoder()._parse_dem(
         dem,
@@ -68,11 +85,13 @@ def test_dem_distance_default_mode_matches_bruteforce():
 
 
 def test_dem_distance_targeted_mode_matches_bruteforce():
-    dem = """
-        error(0.1) D0 L0
-        error(0.1) D0
-        error(0.1) L0
-    """
+    dem = FakeDem(
+        "error(0.1) D0 L0\n"
+        "error(0.1) D0\n"
+        "error(0.1) L0\n",
+        num_detectors=1,
+        num_observables=1,
+    )
     target = np.array([1], dtype=np.uint8)
 
     h_matrix, obs_matrix, _ = Decoder()._parse_dem(
