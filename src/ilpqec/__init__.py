@@ -28,6 +28,7 @@ Supported Solvers:
 """
 
 from ilpqec.css_code import CSSCode, CSSDistanceResult, CSSLogicalBasis
+from ilpqec.dem_distance import DEMDistanceResult, dem_distance
 from ilpqec.decoder import Decoder
 from ilpqec.solver import SolverConfig, get_available_solvers, get_default_solver
 
@@ -36,8 +37,10 @@ __all__ = [
     "CSSCode",
     "CSSDistanceResult",
     "CSSLogicalBasis",
+    "DEMDistanceResult",
     "Decoder",
     "get_available_solvers",
     "get_default_solver",
     "SolverConfig",
+    "dem_distance",
 ]

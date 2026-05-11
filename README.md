@@ -211,6 +211,34 @@ for i in range(10):
 - The `^` separator is treated as whitespace and does not change parsing.
 - If you want to fail fast instead of flattening, pass `flatten_dem=False`.
 
+### DEM Equivalent Distance
+
+```python
+import stim
+from ilpqec import dem_distance
+
+circuit = stim.Circuit.generated(
+    "surface_code:rotated_memory_x",
+    distance=3,
+    rounds=3,
+    after_clifford_depolarization=0.01,
+)
+
+dem = circuit.detector_error_model(decompose_errors=True)
+
+result = dem_distance(dem, solver="highs")
+targeted = dem_distance(dem, target_observables=[1], solver="highs")
+
+print(result.distance)
+print(targeted.observable_mask)
+```
+
+`dem_distance(...)` solves for an exact minimum-weight logical fault in the DEM.
+With `target_observables=[...]`, it instead finds the minimum-weight fault with
+that exact logical effect. This exact-analysis path currently follows the same
+direct-HiGHS-only restriction as the CSS exact-distance helpers. The objective
+ignores `error(p)` probabilities and counts parser-produced DEM mechanisms only.
+
 ### Sinter Integration (optional)
 
 ILPQEC includes a sinter decoder wrapper for benchmarking and sampling.
@@ -269,6 +297,10 @@ print(f"ML correction: {correction}, weight: {weight}")
 ```
 
 Note: `error_probabilities` must be in (0, 0.5]; pass explicit `weights` for p > 0.5.
+
+## Documentation Map
+
+- DEM equivalent distance: `dem_distance.md`
 
 ## Benchmark
 

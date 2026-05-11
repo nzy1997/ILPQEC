@@ -1,4 +1,4 @@
-"""Exact ILP helpers for CSS distance calculations."""
+"""Exact ILP helpers for exact distance calculations."""
 
 from __future__ import annotations
 
@@ -43,14 +43,14 @@ def _exact_solver_config(solver: Optional[str], options: dict[str, Any]) -> Solv
     gap = options.pop("gap", None)
     if gap not in (None, 0, 0.0):
         raise ValueError(
-            "CSS distance APIs require exact optimization; positive gap is not allowed"
+            "Exact distance APIs require exact optimization; positive gap is not allowed"
         )
 
     direct = options.pop("direct", None)
     if direct is None:
         direct = solver_name == "highs"
     if solver_name != "highs" or not direct:
-        raise ValueError("CSS distance ILP currently supports the direct HiGHS backend")
+        raise ValueError("Exact distance ILP currently supports the direct HiGHS backend")
 
     return SolverConfig(
         name=solver_name,
@@ -228,7 +228,7 @@ def _solve_direct_highs(
 
     status = highs.run()
     if status != HighsStatus.kOk:
-        raise RuntimeError("HiGHS failed to solve CSS distance model")
+        raise RuntimeError("HiGHS failed to solve exact distance model")
 
     model_status = highs.getModelStatus()
     if model_status != HighsModelStatus.kOptimal:
